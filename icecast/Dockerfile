@@ -1,18 +1,15 @@
-# Leichtgewichtiges ARM64 Base-Image
+# Basis Image für ARM64
 FROM arm64v8/debian:bookworm-slim
 
-# Icecast installieren
+# Installiere Icecast2
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y icecast2 && \
     rm -rf /var/lib/apt/lists/*
 
-# HAOS Add-on Umgebungsvariablen
-ENV SOURCE_PASSWORD=hackme
-ENV ADMIN_PASSWORD=admin
-
-# Add Startscript
+# Addon Dateien
+COPY icecast.xml /etc/icecast2/icecast.xml
 COPY run.sh /run.sh
 RUN chmod +x /run.sh
 
-# Start Icecast
+# Starte Icecast
 CMD ["/run.sh"]

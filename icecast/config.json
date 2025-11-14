@@ -1,0 +1,16 @@
+{
+  "name": "Icecast",
+  "version": "1.0.0",
+  "slug": "icecast",
+  "description": "Icecast2 Streaming Server Addon",
+  "arch": ["arm64", "aarch64"],
+  "startup": "application",
+  "boot": "auto",
+  "host_network": true,
+  "options": {
+    "admin_password": "changeme"
+  },
+  "schema": {
+    "admin_password": "str"
+  }
+}
