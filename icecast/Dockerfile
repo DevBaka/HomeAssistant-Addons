@@ -5,8 +5,8 @@ RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y icecast2 && \
     rm -rf /var/lib/apt/lists/*
 
-# Add user
-RUN useradd -r -m icecast
+# Add user only if it doesn't exist
+RUN id -u icecast &>/dev/null || useradd -r -m icecast
 
 # Copy start script
 COPY run.sh /run.sh
