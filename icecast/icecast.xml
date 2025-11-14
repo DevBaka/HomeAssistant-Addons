@@ -1,15 +1,18 @@
 <icecast>
   <limits>
-    <client>100</client>
+    <clients>100</clients>
     <sources>2</sources>
   </limits>
+
   <authentication>
     <admin-user>admin</admin-user>
-    <admin-password>hackme</admin-password>
+    <admin-password>baka</admin-password>
   </authentication>
-  <hostname>localhost</hostname>
+
+  <hostname>192.168.178.30</hostname>
   <listen-socket>
-    <port>8000</port>
+    <port>8142</port>
   </listen-socket>
+
   <fileserve>1</fileserve>
 </icecast>

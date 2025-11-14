@@ -1,24 +1,13 @@
 {
-  "name": "Icecast2",
+  "name": "Icecast Server",
   "version": "1.0.0",
   "slug": "icecast",
-  "description": "Minimal Icecast2 Add-on für HAOS (Raspberry Pi, aarch64)",
-  "arch": ["aarch64", "armv7"],
+  "description": "Icecast2 streaming server",
+  "arch": ["aarch64", "armv7", "amd64"],
   "startup": "services",
   "boot": "auto",
+  "map": ["config:rw"],
   "host_network": true,
-  "options": {
-    "BIND_IP": "0.0.0.0",
-    "PORT": 8000,
-    "MOUNTPOINT": "/stream",
-    "SOURCE_PASSWORD": "hackme",
-    "ADMIN_PASSWORD": "admin"
-  },
-  "schema": {
-    "BIND_IP": "str",
-    "PORT": "int",
-    "MOUNTPOINT": "str",
-    "SOURCE_PASSWORD": "str",
-    "ADMIN_PASSWORD": "str"
-  }
+  "options": {},
+  "schema": {}
 }
