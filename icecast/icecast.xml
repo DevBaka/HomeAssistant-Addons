@@ -1,45 +1,15 @@
 <icecast>
   <limits>
-    <clients>100</clients>
+    <client>100</client>
     <sources>2</sources>
   </limits>
-
   <authentication>
     <admin-user>admin</admin-user>
-    <admin-password><ADMIN_PASSWORD></admin-password>
-    <source-password><SOURCE_PASSWORD></source-password>
+    <admin-password>hackme</admin-password>
   </authentication>
-
-  <hostname><BIND_IP></hostname>
-
+  <hostname>localhost</hostname>
   <listen-socket>
-    <port><PORT></port>
-    <bind-address><BIND_IP></bind-address>
+    <port>8000</port>
   </listen-socket>
-
   <fileserve>1</fileserve>
-
-  <paths>
-    <basedir>/var/lib/icecast</basedir>
-    <logdir>/var/log/icecast2</logdir>
-    <webroot>/usr/share/icecast2/web</webroot>
-    <adminroot>/usr/share/icecast2/admin</adminroot>
-  </paths>
-
-  <logging>
-    <accesslog>access.log</accesslog>
-    <errorlog>error.log</errorlog>
-    <loglevel>3</loglevel>
-  </logging>
-
-  <!-- Important: Icecast drops root if you configure changeowner -->
-  <changeowner>
-    <user>icecast</user>
-    <group>icecast</group>
-  </changeowner>
-
-  <mount>
-    <mount-name><MOUNTPOINT></mount-name>
-  </mount>
-
 </icecast>
