@@ -2,8 +2,12 @@ ARG BUILD_FROM=ghcr.io/linuxserver/icecast:latest
 FROM ${BUILD_FROM}
 
 # Environment variables für HAOS Add-on
-ENV SOURCE_PASSWORD=${SOURCE_PASSWORD}
-ENV ADMIN_PASSWORD=${ADMIN_PASSWORD}
+ENV PUID=1000
+ENV PGID=1000
+ENV TZ=Europe/Berlin
 
-# Config wird über linuxserver/icecast automatisch übernommen
-# Ports und Volumes via HA Add-on Config
+# Optionale Config: SOURCE_PASSWORD, ADMIN_PASSWORD
+ENV SOURCE_PASSWORD=hackme
+ENV ADMIN_PASSWORD=admin
+
+# linuxserver/icecast startet automatisch, kein run.sh nötig

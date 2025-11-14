@@ -10,7 +10,6 @@
     "8000/tcp": 8000
   },
   "webui": "http://[HOST]:[PORT:8000]/",
-  "map": ["config:rw"],
   "options": {
     "SOURCE_PASSWORD": "admin",
     "ADMIN_PASSWORD": "admin"
