@@ -1,15 +1,18 @@
-# Basis Image für ARM64
 FROM arm64v8/debian:bookworm-slim
 
-# Installiere Icecast2
+# Install Icecast
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y icecast2 && \
     rm -rf /var/lib/apt/lists/*
 
-# Addon Dateien
-COPY icecast.xml /etc/icecast2/icecast.xml
+# Add user
+RUN useradd -r -m icecast
+
+# Copy start script
 COPY run.sh /run.sh
 RUN chmod +x /run.sh
 
-# Starte Icecast
+# Expose Icecast ports
+EXPOSE 8000
+
 CMD ["/run.sh"]

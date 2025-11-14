@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
+set -e
 
-# Setze Passwörter aus Home Assistant config.json
-ICECAST_XML="/etc/icecast2/icecast.xml"
+# Set passwords from addon options or default
+SOURCE_PASS="${SOURCE_PASSWORD:-hackme}"
+ADMIN_PASS="${ADMIN_PASSWORD:-hackme}"
 
-sed -i "s|<SOURCE-PASSWORD>|${SOURCE_PASSWORD}|g" $ICECAST_XML
-sed -i "s|<ADMIN-PASSWORD>|${ADMIN_PASSWORD}|g" $ICECAST_XML
-sed -i "s|<HOSTNAME>|${HOSTNAME}|g" $ICECAST_XML
-sed -i "s|<PORT>|${PORT}|g" $ICECAST_XML
+# Replace placeholders in Icecast config
+ICECAST_CONF="/etc/icecast2/icecast.xml"
+sed -i "s/<source-password>.*<\/source-password>/<source-password>${SOURCE_PASS}<\/source-password>/" $ICECAST_CONF
+sed -i "s/<admin-password>.*<\/admin-password>/<admin-password>${ADMIN_PASS}<\/admin-password>/" $ICECAST_CONF
 
-# Starte Icecast im Vordergrund
-exec icecast2 -n -c $ICECAST_XML
+# Start Icecast
+exec icecast2 -n -c $ICECAST_CONF
