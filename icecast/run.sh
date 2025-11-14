@@ -1,14 +1,9 @@
 #!/usr/bin/env bash
-set -e
 
-# Set passwords from addon options or default
-SOURCE_PASS="${SOURCE_PASSWORD:-hackme}"
-ADMIN_PASS="${ADMIN_PASSWORD:-hackme}"
+# Use custom port if provided
+if [ ! -z "$PORT" ]; then
+    sed -i "s/<port>8000<\/port>/<port>$PORT<\/port>/" /etc/icecast2/icecast.xml
+fi
 
-# Replace placeholders in Icecast config
-ICECAST_CONF="/etc/icecast2/icecast.xml"
-sed -i "s/<source-password>.*<\/source-password>/<source-password>${SOURCE_PASS}<\/source-password>/" $ICECAST_CONF
-sed -i "s/<admin-password>.*<\/admin-password>/<admin-password>${ADMIN_PASS}<\/admin-password>/" $ICECAST_CONF
-
-# Start Icecast
-exec icecast2 -n -c $ICECAST_CONF
+# Start Icecast as icecast user
+exec su -s /bin/bash icecast -c "icecast -c /etc/icecast2/icecast.xml"
