@@ -2,7 +2,7 @@
   "name": "Icecast Server",
   "version": "1.0.0",
   "slug": "icecast",
-  "description": "Icecast streaming server for HAOS on Raspberry Pi",
+  "description": "Icecast streaming server for HAOS on Raspberry Pi (ARM64)",
   "arch": ["aarch64", "armv7", "amd64"],
   "startup": "services",
   "boot": "auto",
