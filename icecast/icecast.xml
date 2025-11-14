@@ -18,7 +18,6 @@
     <basedir>/var/lib/icecast</basedir>
   </paths>
 
-  <!-- Run Icecast as icecast user -->
   <changeowner>
     <user>icecast</user>
     <group>icecast</group>

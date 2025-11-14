@@ -1,7 +1,3 @@
 #!/usr/bin/env bash
-
-# Set Icecast config file permissions
-chown icecast:icecast /etc/icecast2/icecast.xml
-
-# Start Icecast as the icecast user using changeowner
+# Start Icecast direkt, HA Add-on läuft als PID 1
 exec icecast -c /etc/icecast2/icecast.xml
