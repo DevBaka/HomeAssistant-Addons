@@ -1,12 +1,16 @@
-# ARM64-kompatibles Base-Image
-ARG BUILD_FROM=ghcr.io/linuxserver/icecast:latest
-FROM ${BUILD_FROM}
+FROM arm64v8/debian:bookworm-slim
 
-# Umgebungsvariablen für HAOS Add-on
-ENV PUID=1000
-ENV PGID=1000
-ENV TZ=Europe/Berlin
+# Icecast installieren
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y icecast2 && \
+    rm -rf /var/lib/apt/lists/*
+
+# HAOS Add-on Config
 ENV SOURCE_PASSWORD=hackme
 ENV ADMIN_PASSWORD=admin
 
-# Kein run.sh nötig – linuxserver/icecast startet automatisch
+# Icecast config über Template
+COPY run.sh /run.sh
+RUN chmod +x /run.sh
+
+CMD ["/run.sh"]
