@@ -2,7 +2,7 @@
   "name": "Icecast Server",
   "version": "1.0.0",
   "slug": "icecast",
-  "description": "Icecast2 streaming server",
+  "description": "Icecast2 streaming server for Home Assistant",
   "arch": ["aarch64", "armv7", "amd64"],
   "startup": "services",
   "boot": "auto",
