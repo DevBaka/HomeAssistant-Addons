@@ -5,9 +5,9 @@ RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y icecast2 && \
     rm -rf /var/lib/apt/lists/*
 
-# Icecast user & directories
-RUN groupadd -r icecast && \
-    useradd -r -g icecast -d /var/lib/icecast -s /usr/sbin/nologin icecast && \
+# Icecast user & directories (nur erstellen, wenn nicht vorhanden)
+RUN getent group icecast || groupadd -r icecast && \
+    id -u icecast || useradd -r -g icecast -d /var/lib/icecast -s /usr/sbin/nologin icecast && \
     mkdir -p /var/lib/icecast && \
     chown -R icecast:icecast /var/lib/icecast
 
