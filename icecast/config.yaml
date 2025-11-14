@@ -11,7 +11,7 @@
   },
   "webui": "http://[HOST]:[PORT:8000]/",
   "options": {
-    "SOURCE_PASSWORD": "admin",
+    "SOURCE_PASSWORD": "hackme",
     "ADMIN_PASSWORD": "admin"
   },
   "schema": {
