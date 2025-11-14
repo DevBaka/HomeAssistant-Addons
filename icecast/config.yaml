@@ -1,0 +1,19 @@
+name: "Icecast Server"
+version: "1.0.0"
+slug: "icecast"
+description: "Simple Icecast server addon"
+url: "https://github.com/devbaka/HomeAssistant-Addons"
+arch:
+  - amd64
+  - aarch64
+  - armv7
+startup: services
+boot: auto
+ports:
+  8000/tcp: 8000
+options:
+  source_password: "admin"
+  admin_password: "admin"
+schema:
+  source_password: str
+  admin_password: str
