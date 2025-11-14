@@ -1,20 +1,21 @@
 FROM arm64v8/debian:bookworm-slim
 
-# Install Icecast
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Icecast and small support package for mime types
 RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y icecast2 && \
+    apt-get install -y --no-install-recommends icecast2 mime-support && \
     rm -rf /var/lib/apt/lists/*
 
-# Add icecast user und Gruppe
+# Create group and user in a robust way
 RUN groupadd -f icecast && \
-    id -u icecast || useradd -r -g icecast -d /var/lib/icecast -s /bin/false icecast && \
-    mkdir -p /var/lib/icecast && chown -R icecast:icecast /var/lib/icecast
+    if ! id -u icecast >/dev/null 2>&1; then useradd -r -g icecast -d /var/lib/icecast -s /bin/false icecast; fi && \
+    mkdir -p /var/lib/icecast /var/log/icecast2 && chown -R icecast:icecast /var/lib/icecast /var/log/icecast2
 
-# Copy Icecast config
+# Copy config and start script
 COPY icecast.xml /etc/icecast2/icecast.xml
 RUN chown icecast:icecast /etc/icecast2/icecast.xml
 
-# Copy run script
 COPY run.sh /run.sh
 RUN chmod +x /run.sh
 

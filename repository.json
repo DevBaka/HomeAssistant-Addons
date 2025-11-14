@@ -1,21 +1,5 @@
 {
   "name": "DevBaka Addons",
-  "slug": "devbaka",
   "url": "https://github.com/DevBaka/HomeAssistant-Addons",
-  "maintainers": ["DevBaka"],
-  "version": "1.0.0",
-  "addons": [
-    {
-      "name": "Icecast",
-      "slug": "icecast",
-      "description": "Icecast Streaming Server",
-      "version": "1.0.0",
-      "url": "https://github.com/DevBaka/HomeAssistant-Addons/tree/main/icecast",
-      "arch": ["amd64", "armv7", "armhf", "aarch64", "i386"],
-      "startup": "before",
-      "boot": "auto",
-      "options": {},
-      "schema": {}
-    }
-  ]
+  "maintainer": "DevBaka"
 }
