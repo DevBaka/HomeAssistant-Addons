@@ -1,6 +1,9 @@
-FROM moul/icecast
+ARG BUILD_FROM=ghcr.io/linuxserver/icecast:latest
+FROM ${BUILD_FROM}
 
-COPY run.sh /run.sh
-RUN chmod +x /run.sh
+# Environment variables für HAOS Add-on
+ENV SOURCE_PASSWORD=${SOURCE_PASSWORD}
+ENV ADMIN_PASSWORD=${ADMIN_PASSWORD}
 
-CMD [ "/run.sh" ]
+# Config wird über linuxserver/icecast automatisch übernommen
+# Ports und Volumes via HA Add-on Config

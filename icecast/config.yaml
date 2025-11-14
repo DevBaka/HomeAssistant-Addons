@@ -1,19 +1,22 @@
-name: "Icecast Server"
-version: "1.0.0"
-slug: "icecast"
-description: "Simple Icecast server addon"
-url: "https://github.com/devbaka/HomeAssistant-Addons"
-arch:
-  - amd64
-  - aarch64
-  - armv7
-startup: services
-boot: auto
-ports:
-  8000/tcp: 8000
-options:
-  source_password: "admin"
-  admin_password: "admin"
-schema:
-  source_password: str
-  admin_password: str
+{
+  "name": "Icecast Server",
+  "version": "1.0.0",
+  "slug": "icecast",
+  "description": "Icecast streaming server for HAOS on Raspberry Pi",
+  "arch": ["aarch64", "armv7", "amd64"],
+  "startup": "services",
+  "boot": "auto",
+  "ports": {
+    "8000/tcp": 8000
+  },
+  "webui": "http://[HOST]:[PORT:8000]/",
+  "map": ["config:rw"],
+  "options": {
+    "SOURCE_PASSWORD": "admin",
+    "ADMIN_PASSWORD": "admin"
+  },
+  "schema": {
+    "SOURCE_PASSWORD": "str",
+    "ADMIN_PASSWORD": "str"
+  }
+}
