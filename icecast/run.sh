@@ -1,14 +1,9 @@
 #!/usr/bin/env bash
 set -e
 
-# Icecast als nicht-root user ausführen
 ICECAST_USER=icecast
-ICECAST_GROUP=icecast
 
-# Hostname aus HAOS Add-on Options
-HOSTNAME=${HOSTNAME:-raspberrypi}
-
-# Config generieren
+# Icecast Config erstellen
 cat <<EOF > /etc/icecast2/icecast.xml
 <icecast>
   <authentication>
@@ -16,17 +11,21 @@ cat <<EOF > /etc/icecast2/icecast.xml
     <admin-user>admin</admin-user>
     <admin-password>${ADMIN_PASSWORD}</admin-password>
   </authentication>
-  <hostname>${HOSTNAME}</hostname>
+  <hostname>${BIND_IP}</hostname>
   <listen-socket>
     <port>8000</port>
+    <bind-address>${BIND_IP}</bind-address>
   </listen-socket>
   <fileserve>1</fileserve>
   <paths>
     <logdir>/var/log/icecast2</logdir>
     <webroot>/usr/share/icecast2/web</webroot>
   </paths>
+  <mount>
+    <mount-name>${MOUNTPOINT}</mount-name>
+  </mount>
 </icecast>
 EOF
 
-# Icecast2 starten
+# Icecast als icecast User starten
 exec su -s /bin/bash -c "icecast2 -c /etc/icecast2/icecast.xml" $ICECAST_USER
