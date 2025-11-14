@@ -1,6 +1,6 @@
 {
   "name": "Icecast Server",
-  "version": "1.1.0",
+  "version": "1.0.0",
   "slug": "icecast",
   "description": "Minimalistischer Icecast Server für HAOS auf Raspberry Pi ARM64",
   "arch": ["aarch64", "armv7"],
@@ -11,12 +11,14 @@
   },
   "webui": "http://[HOST]:[PORT:8000]/",
   "options": {
-    "HOSTNAME": "raspberrypi",
+    "BIND_IP": "0.0.0.0",
+    "MOUNTPOINT": "/stream",
     "SOURCE_PASSWORD": "hackme",
     "ADMIN_PASSWORD": "admin"
   },
   "schema": {
-    "HOSTNAME": "str",
+    "BIND_IP": "str",
+    "MOUNTPOINT": "str",
     "SOURCE_PASSWORD": "str",
     "ADMIN_PASSWORD": "str"
   }
