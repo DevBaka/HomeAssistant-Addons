@@ -8,6 +8,12 @@ bashio::log.info "Starting DOCSight..."
 LOG_LEVEL=$(bashio::config 'log_level' 'info')
 export LOG_LEVEL
 
+# Install Home Assistant integration if enabled
+if bashio::config.true 'ha_integration'; then
+    bashio::log.info "Installing Home Assistant integration..."
+    /app/ha_integration_install.sh
+fi
+
 # Change to app directory
 cd /app
 
