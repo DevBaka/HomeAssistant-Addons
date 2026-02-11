@@ -6,7 +6,8 @@ WORKDIR /app
 RUN apk add --no-cache \
     python3 \
     py3-pip \
-    curl
+    curl \
+    bash
 
 # Install Python dependencies
 COPY requirements.txt .
@@ -15,7 +16,8 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 # Copy application files
 COPY app/ ./app/
 COPY run.sh /run.sh
-RUN chmod +x /run.sh
+COPY ha_integration_install.sh /ha_integration_install.sh
+RUN chmod +x /run.sh /ha_integration_install.sh
 
 # Set up version
 RUN echo "${VERSION}" > /app/VERSION
