@@ -8,5 +8,8 @@ bashio::log.info "Starting DOCSight..."
 LOG_LEVEL=$(bashio::config 'log_level' 'info')
 export LOG_LEVEL
 
+# Change to app directory
+cd /app
+
 # Start DOCSight
-exec python -m app.main
+exec python3 -m app.main

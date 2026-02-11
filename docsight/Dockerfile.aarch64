@@ -1,4 +1,4 @@
-FROM homeassistant/amd64-base:latest
+FROM homeassistant/aarch64-base:latest
 ARG VERSION=dev
 WORKDIR /app
 
