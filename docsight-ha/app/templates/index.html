@@ -1,0 +1,2281 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}" data-theme="{{ theme|default('dark') }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>DOCSight</title>
+    <link rel="icon" type="image/png" href="/static/icon.png">
+    <style>
+        :root, [data-theme="dark"] {
+            --bg: #1a1a2e;
+            --surface: #16213e;
+            --card: #0f3460;
+            --text: #e0e0e0;
+            --muted: #888;
+            --good: #4caf50;
+            --warn: #ff9800;
+            --crit: #f44336;
+            --accent: #00adb5;
+            --info: #2196f3;
+            --input-border: rgba(255,255,255,0.15);
+            --overlay: rgba(0,0,0,0.5);
+        }
+        [data-theme="light"] {
+            --bg: #f0f2f5;
+            --surface: #ffffff;
+            --card: #e8edf2;
+            --text: #1a1a2e;
+            --muted: #666;
+            --good: #2e7d32;
+            --warn: #e65100;
+            --crit: #c62828;
+            --accent: #00838f;
+            --info: #1565c0;
+            --input-border: #ccc;
+            --overlay: rgba(0,0,0,0.3);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+            background: var(--bg);
+            color: var(--text);
+            overflow-x: hidden;
+        }
+
+        /* ── Topbar ── */
+        .topbar {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 16px; background: var(--surface);
+            border-bottom: 1px solid var(--input-border);
+            position: sticky; top: 0; z-index: 50;
+        }
+        .hamburger-btn {
+            background: none; border: none; color: var(--text);
+            font-size: 1.5em; cursor: pointer; padding: 2px 6px;
+            border-radius: 4px; line-height: 1;
+        }
+        .hamburger-btn:hover { color: var(--accent); }
+        .date-nav { display: flex; align-items: center; gap: 2px; }
+        .date-nav button {
+            background: none; border: 1px solid var(--input-border);
+            color: var(--text); border-radius: 4px; cursor: pointer;
+            font-size: 0.85em; padding: 4px 8px;
+        }
+        .date-nav button:hover { border-color: var(--accent); color: var(--accent); }
+        .date-label {
+            font-size: 0.9em; font-weight: bold; padding: 4px 10px;
+            cursor: pointer; border: 1px solid transparent;
+            border-radius: 4px; white-space: nowrap;
+        }
+        .date-label:hover { border-color: var(--accent); }
+        .topbar-title {
+            flex: 1; font-size: 1.1em; color: var(--accent);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .topbar-meta { font-size: 0.8em; color: var(--muted); white-space: nowrap; }
+        .lang-select {
+            background: var(--surface); color: var(--muted); border: 1px solid var(--border);
+            border-radius: 6px; padding: 4px 6px; font-size: 0.8em; cursor: pointer;
+            font-family: inherit;
+        }
+        .lang-select:hover { color: var(--accent); border-color: var(--accent); }
+        .theme-toggle {
+            background: none; border: 1px solid var(--input-border);
+            color: var(--muted); font-size: 1.1em; cursor: pointer;
+            padding: 4px 8px; border-radius: 4px; line-height: 1;
+        }
+        .theme-toggle:hover { color: var(--accent); border-color: var(--accent); }
+        .refresh-btn {
+            background: none; border: 1px solid var(--input-border);
+            color: var(--muted); font-size: 1.1em; cursor: pointer;
+            padding: 4px 8px; border-radius: 4px; line-height: 1;
+            transition: color 0.2s, border-color 0.2s;
+        }
+        .refresh-btn:hover { color: var(--accent); border-color: var(--accent); }
+        .refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .refresh-btn.spinning { animation: spin 1s linear infinite; }
+        .toast {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            padding: 10px 20px; border-radius: 6px; font-size: 0.9em; z-index: 300;
+            opacity: 0; transition: opacity 0.3s; pointer-events: none;
+        }
+        .toast.show { opacity: 1; }
+        .toast-success { background: var(--good); color: #fff; }
+        .toast-error { background: var(--crit); color: #fff; }
+
+        /* ── Layout ── */
+        .app-layout { display: flex; height: 100vh; overflow: hidden; }
+
+        /* ── Sidebar ── */
+        .sidebar {
+            width: 240px; min-width: 240px;
+            background: var(--surface);
+            display: flex; flex-direction: column;
+            border-right: 1px solid var(--input-border);
+            transition: width 0.25s ease, min-width 0.25s ease;
+            overflow: hidden;
+        }
+        .sidebar.collapsed { width: 0; min-width: 0; }
+        .sidebar-content { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+        .sidebar-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 14px 20px; border-bottom: 1px solid var(--input-border);
+            font-weight: bold; color: var(--accent); white-space: nowrap;
+        }
+        .sidebar-toggle {
+            background: none; border: none; color: var(--muted);
+            font-size: 1.2em; cursor: pointer; line-height: 1; padding: 2px 4px;
+        }
+        .sidebar-toggle:hover { color: var(--accent); }
+        .app-main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-y: auto; }
+        .sidebar-link {
+            display: flex; align-items: center; gap: 10px;
+            padding: 12px 20px; color: var(--text); text-decoration: none;
+            font-size: 0.95em; cursor: pointer; transition: background 0.15s;
+        }
+        .sidebar-link:hover { background: var(--card); }
+        .sidebar-link.active { color: var(--accent); background: rgba(0,173,181,0.1); }
+        .sidebar-link .icon { font-size: 1.1em; width: 24px; text-align: center; }
+        .recording-dot { color: #e74c3c; animation: blink-recording 1.5s ease-in-out infinite; }
+        @keyframes blink-recording { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+        .sidebar-divider { border-top: 1px solid var(--input-border); margin: 8px 0; }
+        /* sidebar-ref removed */
+
+        /* ── Calendar Popup ── */
+        .calendar-popup {
+            position: fixed; top: 52px; left: 80px;
+            background: var(--surface); border: 1px solid var(--input-border);
+            border-radius: 8px; padding: 12px; z-index: 80; display: none;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3); min-width: 280px;
+        }
+        .calendar-popup.open { display: block; }
+        .cal-nav {
+            display: flex; justify-content: space-between;
+            align-items: center; margin-bottom: 8px;
+        }
+        .cal-nav button {
+            background: none; border: 1px solid var(--input-border);
+            color: var(--text); border-radius: 4px; cursor: pointer;
+            padding: 4px 10px; font-size: 0.9em;
+        }
+        .cal-nav button:hover { border-color: var(--accent); }
+        .cal-nav span { font-weight: bold; font-size: 0.95em; }
+        .cal-weekdays {
+            display: grid; grid-template-columns: repeat(7, 1fr);
+            text-align: center; font-size: 0.75em; color: var(--muted); margin-bottom: 4px;
+        }
+        .cal-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+        .cal-day {
+            text-align: center; padding: 6px 2px; font-size: 0.85em;
+            border-radius: 4px; cursor: default; color: var(--muted);
+        }
+        .cal-day.has-data { color: var(--text); cursor: pointer; font-weight: bold; }
+        .cal-day.has-data:hover { background: var(--card); }
+        .cal-day.today { border: 1px solid var(--accent); }
+        .cal-day.selected { background: var(--accent); color: #000; }
+        .cal-day.empty { visibility: hidden; }
+
+        /* ── Main Content ── */
+        .main-content { padding: 16px; max-width: 1400px; margin: 0 auto; }
+        .view { display: none; }
+        .view.active { display: block; }
+
+        /* ── Dashboard ── */
+        .history-banner {
+            padding: 10px 16px; border-radius: 6px;
+            background: rgba(33,150,243,0.15); border: 1px solid var(--info);
+            color: var(--info); font-size: 0.95em; margin-bottom: 16px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .history-banner a { color: var(--info); font-size: 0.85em; }
+        .health-banner {
+            padding: 16px 20px; border-radius: 8px; margin-bottom: 16px;
+        }
+        .health-good { background: rgba(76,175,80,0.1); border: 1px solid var(--good); }
+        .health-warn { background: rgba(255,152,0,0.1); border: 1px solid var(--warn); }
+        .health-crit { background: rgba(244,67,54,0.1); border: 1px solid var(--crit); }
+        .health-status { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+        .health-icon { font-size: 1.4em; }
+        .health-good .health-icon { color: var(--good); }
+        .health-warn .health-icon { color: var(--warn); }
+        .health-crit .health-icon { color: var(--crit); }
+        .health-title { font-size: 1.15em; font-weight: bold; }
+        .health-good .health-title { color: var(--good); }
+        .health-warn .health-title { color: var(--warn); }
+        .health-crit .health-title { color: var(--crit); }
+        .health-msg { font-size: 0.9em; color: var(--text); opacity: 0.85; margin-bottom: 4px; }
+        .health-issues { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+        .health-issue {
+            padding: 8px 12px; border-radius: 6px;
+            background: rgba(0,0,0,0.15);
+        }
+        .health-issue-name { font-weight: bold; font-size: 0.9em; display: block; }
+        .health-issue-desc { font-size: 0.82em; color: var(--muted); margin-top: 2px; display: block; }
+        h2.section-title { font-size: 1.1em; margin: 16px 0 8px; color: var(--accent); }
+        /* ── Connection Info Bar ── */
+        .conn-info-bar {
+            background: var(--surface); border-radius: 6px; padding: 10px 16px;
+            font-size: 0.9em; color: var(--muted); margin-bottom: 12px;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .conn-info-bar .conn-sep { opacity: 0.4; }
+
+        /* ── Metric Cards Grid ── */
+        .metric-cards {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 12px; margin-bottom: 16px;
+        }
+
+        /* ── Metric Card ── */
+        .metric-card {
+            background: var(--surface); border-radius: 6px;
+            border-left: 4px solid var(--muted); overflow: hidden;
+        }
+        .metric-card.health-good { border-left-color: var(--good); }
+        .metric-card.health-warn { border-left-color: var(--warn); }
+        .metric-card.health-crit { border-left-color: var(--crit); }
+
+        .metric-card-header {
+            display: flex; align-items: center; gap: 8px;
+            padding: 12px 14px 0; cursor: pointer; user-select: none;
+        }
+        .metric-card-header .status-dot {
+            width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+        }
+        .health-good .status-dot { background: var(--good); }
+        .health-warn .status-dot { background: var(--warn); }
+        .health-crit .status-dot { background: var(--crit); }
+        .metric-card-header .card-title {
+            font-size: 0.75em; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.05em; color: var(--muted); flex: 1;
+        }
+        .metric-card-header .chevron {
+            font-size: 0.7em; color: var(--muted); transition: transform 0.25s ease;
+        }
+        .metric-card.open .metric-card-header .chevron { transform: rotate(90deg); }
+
+        .metric-card-body { padding: 8px 14px 14px; }
+
+        /* ── Metric Row (side-by-side metrics) ── */
+        .metric-row { display: flex; gap: 20px; }
+        .metric-item { flex: 1; min-width: 0; }
+        .metric-value {
+            font-size: 1.6em; font-weight: bold; line-height: 1.2;
+        }
+        .metric-value.val-good { color: var(--good); }
+        .metric-value.val-warn { color: var(--warn); }
+        .metric-value.val-crit { color: var(--crit); }
+        .metric-unit { font-size: 0.7em; font-weight: normal; color: var(--muted); margin-left: 2px; }
+        .metric-label { font-size: 0.78em; color: var(--muted); margin-top: 2px; }
+
+        /* ── Range Indicator ── */
+        .range-indicator {
+            position: relative; height: 6px; border-radius: 3px;
+            margin-top: 8px; display: flex; overflow: visible;
+        }
+        .range-zone { height: 100%; }
+        .range-zone:first-child { border-radius: 3px 0 0 3px; }
+        .range-zone:last-of-type { border-radius: 0 3px 3px 0; }
+        .range-good { background: var(--good); opacity: 0.25; }
+        .range-warn { background: var(--warn); opacity: 0.25; }
+        .range-crit { background: var(--crit); opacity: 0.25; }
+        .range-marker {
+            position: absolute; top: -4px; width: 3px; height: 14px;
+            border-radius: 1.5px; transform: translateX(-50%);
+            transition: left 0.4s ease;
+        }
+        .range-marker.val-good { background: var(--good); }
+        .range-marker.val-warn { background: var(--warn); }
+        .range-marker.val-crit { background: var(--crit); }
+        .range-labels {
+            display: flex; justify-content: space-between;
+            font-size: 0.6em; color: var(--muted); margin-top: 3px;
+        }
+
+        /* ── Gauge Bar (errors only) ── */
+        .gauge-bar {
+            height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px;
+            margin-top: 6px; overflow: hidden;
+        }
+        [data-theme="light"] .gauge-bar { background: rgba(0,0,0,0.08); }
+        .gauge-fill { height: 100%; border-radius: 2px; transition: width 0.4s ease; }
+        .gauge-fill.val-good { background: var(--good); }
+        .gauge-fill.val-warn { background: var(--warn); }
+        .gauge-fill.val-crit { background: var(--crit); }
+
+        /* ── Secondary Value (errors card) ── */
+        .metric-secondary {
+            font-size: 0.85em; color: var(--muted); margin-top: 6px;
+        }
+        .metric-secondary strong { color: var(--text); font-weight: 600; }
+
+        /* ── Card Detail (expandable) ── */
+        .metric-card-detail {
+            max-height: 0; overflow: hidden;
+            transition: max-height 0.3s ease;
+            padding: 0 14px;
+        }
+        .metric-card.open .metric-card-detail { max-height: 300px; }
+        .detail-table {
+            width: 100%; font-size: 0.82em; border-collapse: collapse;
+            margin: 8px 0 12px;
+        }
+        .detail-table td { padding: 4px 0; }
+        .detail-table td:first-child { color: var(--muted); padding-right: 12px; }
+        .detail-note {
+            font-size: 0.78em; color: var(--muted); font-style: italic;
+            padding-bottom: 12px;
+        }
+        .card-notice {
+            font-size: 0.78em; padding: 6px 10px; margin-top: 8px;
+            border-radius: 4px; display: flex; align-items: center; gap: 6px;
+        }
+        .card-notice-warn {
+            background: rgba(255,152,0,0.1); color: var(--warn);
+        }
+
+        /* ── Tables ── */
+        table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 0.9em; }
+        th, td { padding: 6px 10px; text-align: left; }
+        th {
+            background: var(--surface); color: var(--accent);
+            position: sticky; top: 52px; cursor: pointer; user-select: none;
+            white-space: nowrap;
+        }
+        th:hover { text-decoration: underline; }
+        th.sort-asc::after { content: " \25B2"; font-size: 0.65em; }
+        th.sort-desc::after { content: " \25BC"; font-size: 0.65em; }
+        tr { border-bottom: 1px solid rgba(255,255,255,0.05); }
+        tr:hover { background: rgba(255,255,255,0.03); }
+        .badge {
+            display: inline-block; padding: 2px 8px; border-radius: 4px;
+            font-size: 0.8em; font-weight: bold;
+        }
+        .badge-good { background: rgba(76,175,80,0.25); color: var(--good); }
+        .badge-warn { background: rgba(255,152,0,0.25); color: var(--warn); }
+        .badge-crit { background: rgba(244,67,54,0.25); color: var(--crit); }
+        .val-good { color: var(--good); }
+        .val-warn { color: var(--warn); }
+        .val-crit { color: var(--crit); }
+        .val-bad { color: #e74c3c; font-weight: 600; }
+        #speedtest-table th { cursor: pointer; user-select: none; }
+        #speedtest-table th:hover { background: var(--surface-hover, rgba(255,255,255,0.05)); }
+        .speedtest-chart-wrap {
+            position: relative; width: 100%;
+            border: 1px solid var(--input-border); border-radius: 8px;
+            background: var(--surface); margin-bottom: 24px;
+            padding-bottom: 8px;
+        }
+        .speedtest-chart-wrap canvas { display: block; width: 100%; height: 250px; }
+        .speedtest-chart-legend {
+            display: flex; gap: 18px; justify-content: center;
+            padding: 8px 0 4px; font-size: 0.78em; color: var(--muted);
+        }
+        .speedtest-chart-legend span::before {
+            content: ''; display: inline-block; width: 10px; height: 10px;
+            border-radius: 50%; margin-right: 5px; vertical-align: -1px;
+        }
+        .legend-dl::before { background: #3b82f6; }
+        .legend-ul::before { background: #22c55e; }
+        .legend-ping::before { background: #f59e0b; }
+        .legend-thresh::before { background: #ef4444; }
+        .speedtest-chart-tooltip {
+            position: absolute; pointer-events: none; display: none;
+            background: rgba(0,0,0,0.85); color: #e0e0e0; font-size: 0.78em;
+            padding: 6px 10px; border-radius: 6px; white-space: nowrap; z-index: 1000;
+        }
+        .sort-indicator { margin-left: 4px; font-size: 0.8em; opacity: 0.7; }
+        .error-box {
+            background: rgba(244,67,54,0.15); border: 1px solid var(--crit);
+            color: var(--crit); padding: 12px; border-radius: 6px; margin-bottom: 16px;
+        }
+        .waiting {
+            text-align: center; padding: 60px 20px; color: var(--muted);
+        }
+        .waiting .spinner {
+            display: inline-block; width: 30px; height: 30px;
+            border: 3px solid var(--surface); border-top: 3px solid var(--accent);
+            border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 12px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Collapsible Channel Groups ── */
+        details.channel-group { margin-bottom: 4px; }
+        details.channel-group summary {
+            cursor: pointer; padding: 8px 12px; background: var(--surface);
+            border-radius: 6px; font-size: 0.95em; font-weight: bold;
+            color: var(--accent); list-style: none;
+            display: flex; align-items: center; gap: 8px; user-select: none;
+        }
+        details.channel-group summary .badge { margin-left: auto; }
+        details.channel-group summary::-webkit-details-marker { display: none; }
+        details.channel-group summary::before {
+            content: "\25B6"; font-size: 0.65em; transition: transform 0.2s;
+        }
+        details.channel-group[open] summary::before { transform: rotate(90deg); }
+        details.channel-group table { margin-top: 4px; }
+
+        /* ── Trends ── */
+        .trend-header {
+            display: flex; justify-content: space-between;
+            align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;
+        }
+        .trend-title { font-size: 1.2em; color: var(--accent); font-weight: bold; }
+        .trend-tabs {
+            display: flex; gap: 0; border-radius: 6px; overflow: hidden;
+            border: 1px solid var(--input-border);
+        }
+        .trend-tab {
+            background: transparent; border: none; color: var(--muted);
+            padding: 6px 16px; font-size: 0.85em; cursor: pointer;
+            font-family: inherit; transition: background 0.15s, color 0.15s;
+            border-right: 1px solid var(--input-border);
+        }
+        .trend-tab:last-child { border-right: none; }
+        .trend-tab:hover { color: var(--text); background: rgba(0,173,181,0.05); }
+        .trend-tab.active { background: var(--accent); color: #000; font-weight: bold; }
+        .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .chart-card { background: var(--surface); border-radius: 8px; padding: 16px; }
+        .chart-card .chart-label { font-size: 0.85em; color: var(--muted); margin-bottom: 8px; }
+        .chart-card canvas { width: 100% !important; }
+        .no-data-msg {
+            text-align: center; padding: 40px 20px;
+            color: var(--muted); font-size: 0.95em;
+        }
+
+        /* ── Export Modal ── */
+        .modal-overlay {
+            position: fixed; inset: 0; background: var(--overlay);
+            z-index: 200; display: none; justify-content: center; align-items: center;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal {
+            background: var(--surface); border-radius: 10px;
+            padding: 20px; max-width: 720px; width: 90%; max-height: 85vh;
+            display: flex; flex-direction: column;
+            border: 1px solid var(--input-border);
+            box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+        }
+        .modal-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 8px;
+        }
+        .modal-header h2 { font-size: 1.1em; color: var(--accent); margin: 0; }
+        .modal-close {
+            background: none; border: none; color: var(--muted);
+            font-size: 1.4em; cursor: pointer; line-height: 1;
+        }
+        .modal-close:hover { color: var(--text); }
+        .modal-hint { font-size: 0.85em; color: var(--muted); margin-bottom: 12px; }
+        .modal-body {
+            flex: 1; overflow-y: auto; margin-bottom: 12px;
+        }
+        .modal-body textarea {
+            width: 100%; min-height: 300px; background: var(--bg);
+            color: var(--text); border: 1px solid var(--input-border);
+            border-radius: 6px; padding: 12px; font-size: 0.82em;
+            font-family: 'Consolas', 'Monaco', monospace; resize: vertical;
+        }
+        .modal-footer { display: flex; gap: 10px; justify-content: flex-end; }
+        .modal-footer .btn {
+            display: inline-block; padding: 8px 20px; border: none;
+            border-radius: 4px; cursor: pointer; font-size: 0.9em;
+            font-family: inherit; font-weight: bold;
+        }
+        .btn-accent { background: var(--accent); color: #000; }
+        .btn-accent:hover { filter: brightness(1.15); }
+        .btn-muted {
+            background: var(--card); color: var(--text);
+            border: 1px solid var(--input-border);
+        }
+        .btn-muted:hover { background: var(--accent); color: #000; }
+
+        /* ── Responsive ── */
+        @media (max-width: 900px) {
+            .charts-grid { grid-template-columns: 1fr; }
+            .sidebar { width: 0; min-width: 0; }
+            .sidebar.collapsed { width: 0; min-width: 0; }
+        }
+        @media (max-width: 900px) {
+            .metric-cards { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 600px) {
+            body { font-size: 14px; }
+            .topbar { gap: 6px; padding: 8px 10px; }
+            .topbar-title { display: none; }
+            .metric-cards { grid-template-columns: 1fr; }
+            .metric-row { flex-direction: column; gap: 10px; }
+            table { font-size: 0.8em; }
+            th, td { padding: 4px 6px; }
+            .calendar-popup { left: 10px; right: 10px; min-width: auto; }
+        }
+    </style>
+</head>
+<body>
+<div class="app-layout">
+
+<!-- Sidebar -->
+<nav class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <img src="/static/icon.png" alt="DOCSight" style="width:28px;height:28px;border-radius:6px;vertical-align:middle;margin-right:8px;">
+        <span>DOCSight</span>
+        <button class="sidebar-toggle" id="sidebar-collapse" title="Collapse">&#10094;</button>
+    </div>
+    <div class="sidebar-content">
+        <a class="sidebar-link active" data-view="live">
+            <span class="icon recording-dot">&#9679;</span> {{ t.live_dashboard }}
+        </a>
+        <a class="sidebar-link" data-view="trends">
+            <span class="icon">&#128202;</span> {{ t.signal_trends }}
+        </a>
+        {% if speedtest_configured %}
+        <a class="sidebar-link" data-view="speedtest">
+            <span class="icon">&#9889;</span> {{ t.speedtest }}
+        </a>
+        {% else %}
+        <a class="sidebar-link" onclick="openSpeedtestSetupModal()">
+            <span class="icon">&#9889;</span> {{ t.speedtest }} <span style="font-size:0.7em; color:var(--muted); margin-left:4px;">{{ t.optional }}</span>
+        </a>
+        {% endif %}
+        {% if bqm_configured %}
+        <a class="sidebar-link" data-view="bqm">
+            <span class="icon">&#128225;</span> {{ t.bqm_title }}
+        </a>
+        {% else %}
+        <a class="sidebar-link" onclick="openBqmSetupModal()">
+            <span class="icon">&#128225;</span> {{ t.bqm_title }} <span style="font-size:0.7em; color:var(--muted); margin-left:4px;">{{ t.bqm_optional }}</span>
+        </a>
+        {% endif %}
+        <div class="sidebar-divider"></div>
+        <a class="sidebar-link" id="report-link" onclick="openReportModal()">
+            <span class="icon">&#128226;</span> {{ t.incident_report }}
+        </a>
+        <a class="sidebar-link" id="export-link" onclick="exportForLLM()">
+            <span class="icon">&#128203;</span> {{ t.export_llm }}
+        </a>
+        <div style="flex:1;"></div>
+        <div class="sidebar-divider"></div>
+        <a class="sidebar-link" href="/settings">
+            <span class="icon">&#9881;</span> {{ t.settings }}
+        </a>
+        {% if auth_enabled %}
+        <a class="sidebar-link" href="/logout">
+            <span class="icon">&#128682;</span> {{ t.logout }}
+        </a>
+        {% endif %}
+        <div style="padding: 8px 20px 12px;">
+            <a href="https://github.com/itsDNNS/docsight/releases" target="_blank"
+               style="color: var(--muted); font-size: 0.75em; text-decoration: none; opacity: 0.6;"
+               onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'">{{ version }}</a>
+        </div>
+    </div>
+</nav>
+
+<!-- Main Area -->
+<div class="app-main">
+
+<!-- Topbar -->
+<div class="topbar">
+    <button class="hamburger-btn" id="hamburger" title="Menu">&#9776;</button>
+    <div class="date-nav" id="date-nav">
+        <button id="date-prev">&#8249;</button>
+        <span class="date-label" id="date-label" title="{{ t.open_calendar }}">{{ t.live }}</span>
+        <button id="date-next">&#8250;</button>
+    </div>
+    <span class="topbar-title">DOCSight</span>
+    <span class="topbar-meta" id="topbar-meta">
+        {% if last_update %}{{ t.last_update }}: {{ last_update }} | {{ poll_interval }}s{% endif %}
+    </span>
+    {% if not historical %}
+    <button class="refresh-btn" id="refresh-btn" title="{{ t.refresh }}">&#x1F504;</button>
+    {% endif %}
+    <select class="lang-select" id="lang-select" title="Language">
+        {% for code, name in languages.items() %}
+        <option value="{{ code }}" {% if code == lang %}selected{% endif %}>{{ lang_flags.get(code, '') }} {{ code.upper() }}</option>
+        {% endfor %}
+    </select>
+    <button class="theme-toggle" id="theme-toggle" title="Toggle theme">&#9790;</button>
+</div>
+
+<!-- Calendar Popup -->
+<div class="calendar-popup" id="calendar-popup">
+    <div class="cal-nav">
+        <button id="cal-prev">&lsaquo;</button>
+        <span id="cal-month-label"></span>
+        <button id="cal-next">&rsaquo;</button>
+    </div>
+    <div class="cal-weekdays">
+        <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
+    </div>
+    <div class="cal-days" id="cal-days"></div>
+</div>
+
+<!-- ═══ View: Dashboard ═══ -->
+<div class="main-content">
+<div id="view-dashboard" class="view active">
+
+{% if historical %}
+<div class="history-banner">
+    {{ t.historical_view }}: {{ snapshot_ts.replace("T", " ") }}
+    <a href="/">{{ t.back_to_live }} &rarr;</a>
+</div>
+{% endif %}
+
+{% if error %}
+<div class="error-box">{{ t.error_label }}: {{ error }}</div>
+{% endif %}
+
+{% if analysis %}
+    {% set s = analysis.summary %}
+    {% set ds = analysis.ds_channels %}
+    {% set us = analysis.us_channels %}
+
+    {% set health_map = {"good": t.health_good, "marginal": t.health_marginal, "poor": t.health_poor} %}
+    {% set health_label = health_map.get(s.health, s.health) %}
+    {% set health_msgs = {"good": t.health_good_msg, "marginal": t.health_marginal_msg, "poor": t.health_poor_msg} %}
+    {% set issue_labels = {
+        "ds_power_critical": t.issue_ds_power_critical,
+        "us_power_critical": t.issue_us_power_critical,
+        "us_power_warn": t.issue_us_power_warn,
+        "snr_critical": t.issue_snr_critical,
+        "snr_warn": t.issue_snr_warn,
+        "uncorr_errors_high": t.issue_uncorr_errors_high,
+    } %}
+    {% set issue_descs = {
+        "ds_power_critical": t.issue_ds_power_critical_desc,
+        "us_power_critical": t.issue_us_power_critical_desc,
+        "us_power_warn": t.issue_us_power_warn_desc,
+        "snr_critical": t.issue_snr_critical_desc,
+        "snr_warn": t.issue_snr_warn_desc,
+        "uncorr_errors_high": t.issue_uncorr_errors_high_desc,
+    } %}
+
+    <div class="health-banner health-{{ 'good' if s.health == 'good' else ('crit' if s.health == 'poor' else 'warn') }}">
+        <div class="health-status">
+            <span class="health-icon">{% if s.health == 'good' %}&#10004;{% elif s.health == 'poor' %}&#10006;{% else %}&#9888;{% endif %}</span>
+            <span class="health-title">{{ health_label }}</span>
+        </div>
+        <div class="health-msg">{{ health_msgs.get(s.health, '') }}</div>
+        {% if s.health_issues %}
+        <div class="health-issues">
+            {% for issue in s.health_issues %}
+            <div class="health-issue">
+                <span class="health-issue-name">{{ issue_labels.get(issue, issue) }}</span>
+                <span class="health-issue-desc">{{ issue_descs.get(issue, '') }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
+    {# ── Connection Info Bar ── #}
+    {% if isp_name or (connection_info and connection_info.max_downstream_kbps) %}
+    <div class="conn-info-bar">
+        {% if isp_name %}{{ isp_name }}{% endif %}
+        {% if connection_info and connection_info.max_downstream_kbps %}
+            {% if isp_name %}<span class="conn-sep">&middot;</span>{% endif %}
+            {{ connection_info.max_downstream_kbps // 1000 }}/{{ connection_info.max_upstream_kbps // 1000 }} Mbit/s
+        {% endif %}
+        <span class="conn-sep">|</span>
+        {{ s.ds_total }} DS <span class="conn-sep">/</span> {{ s.us_total }} US {{ t.channels|lower }}
+    </div>
+    {% endif %}
+
+    {# ── Per-card health ── #}
+    {% set signal_health = 'crit' if 'ds_power_critical' in s.health_issues or 'snr_critical' in s.health_issues
+       else ('warn' if 'snr_warn' in s.health_issues else 'good') %}
+    {% set us_health = 'crit' if 'us_power_critical' in s.health_issues
+       else ('warn' if 'us_power_warn' in s.health_issues else 'good') %}
+    {% set error_health = 'crit' if 'uncorr_errors_high' in s.health_issues else 'good' %}
+
+    {# ── DS Power health ── #}
+    {% set ds_pwr_health = 'crit' if 'ds_power_critical' in s.health_issues else 'good' %}
+    {# ── SNR health ── #}
+    {% set snr_health = 'crit' if 'snr_critical' in s.health_issues else ('warn' if 'snr_warn' in s.health_issues else 'good') %}
+
+    {# ── Range marker positions (clamped 2-98%) ── #}
+    {% set ds_pwr_marker = [2, [98, ((s.ds_power_avg + 12) / 24 * 100)|round|int]|min]|max %}
+    {% set snr_marker = [2, [98, ((s.ds_snr_avg - 15) / 30 * 100)|round|int]|min]|max %}
+    {% set us_pwr_marker = [2, [98, ((s.us_power_avg - 25) / 35 * 100)|round|int]|min]|max %}
+
+    <div class="metric-cards">
+        {# ── Card 1: Downstream ── #}
+        <div class="metric-card health-{{ signal_health }}">
+            <div class="metric-card-header" onclick="toggleCard(this.parentNode)">
+                <span class="status-dot"></span>
+                <span class="card-title">&#8595; {{ t.card_signal_quality }}</span>
+                <span class="chevron">&#9654;</span>
+            </div>
+            <div class="metric-card-body">
+                <div class="metric-row">
+                    <div class="metric-item">
+                        <div class="metric-value val-{{ ds_pwr_health }}">{{ s.ds_power_avg }}<span class="metric-unit">dBmV</span></div>
+                        <div class="metric-label">{{ t.card_ds_power }}</div>
+                        <div class="range-indicator">
+                            <div class="range-zone range-crit" style="width:8.3%"></div>
+                            <div class="range-zone range-warn" style="width:12.5%"></div>
+                            <div class="range-zone range-good" style="width:58.3%"></div>
+                            <div class="range-zone range-warn" style="width:12.5%"></div>
+                            <div class="range-zone range-crit" style="width:8.4%"></div>
+                            <div class="range-marker val-{{ ds_pwr_health }}" style="left:{{ ds_pwr_marker }}%"></div>
+                        </div>
+                        <div class="range-labels"><span>-12</span><span>0</span><span>+12</span></div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value val-{{ snr_health }}">{{ s.ds_snr_avg }}<span class="metric-unit">dB</span></div>
+                        <div class="metric-label">{{ t.card_snr }}</div>
+                        <div class="range-indicator">
+                            <div class="range-zone range-crit" style="width:33.3%"></div>
+                            <div class="range-zone range-warn" style="width:16.7%"></div>
+                            <div class="range-zone range-good" style="width:50%"></div>
+                            <div class="range-marker val-{{ snr_health }}" style="left:{{ snr_marker }}%"></div>
+                        </div>
+                        <div class="range-labels"><span>15</span><span>25</span><span>30</span><span>45 dB</span></div>
+                    </div>
+                </div>
+            </div>
+            <div class="metric-card-detail">
+                <table class="detail-table">
+                    <tr><td>{{ t.card_power_range }}</td><td>{{ s.ds_power_min }} ... {{ s.ds_power_max }} dBmV</td></tr>
+                    <tr><td>SNR {{ t.card_power_range }}</td><td>{{ s.ds_snr_min }} ... {{ s.ds_snr_avg }} dB</td></tr>
+                    <tr><td>{{ t.channels }}</td><td>{{ s.ds_total }} {{ t.downstream|lower }}</td></tr>
+                    <tr><td>{{ t.card_ideal_range }}</td><td>-7...+7 dBmV / SNR &gt;30 dB</td></tr>
+                </table>
+            </div>
+        </div>
+
+        {# ── Card 2: Upstream ── #}
+        <div class="metric-card health-{{ us_health }}">
+            <div class="metric-card-header" onclick="toggleCard(this.parentNode)">
+                <span class="status-dot"></span>
+                <span class="card-title">&#8593; {{ t.card_upstream }}</span>
+                <span class="chevron">&#9654;</span>
+            </div>
+            <div class="metric-card-body">
+                <div class="metric-row">
+                    <div class="metric-item">
+                        <div class="metric-value val-{{ us_health }}">{{ s.us_power_avg }}<span class="metric-unit">dBmV</span></div>
+                        <div class="metric-label">{{ t.card_transmit_power }}</div>
+                        <div class="range-indicator">
+                            <div class="range-zone range-good" style="width:68.6%"></div>
+                            <div class="range-zone range-warn" style="width:14.3%"></div>
+                            <div class="range-zone range-crit" style="width:17.1%"></div>
+                            <div class="range-marker val-{{ us_health }}" style="left:{{ us_pwr_marker }}%"></div>
+                        </div>
+                        <div class="range-labels"><span>25</span><span>35</span><span>49</span><span>54</span><span>60</span></div>
+                    </div>
+                </div>
+            </div>
+            <div class="metric-card-detail">
+                <table class="detail-table">
+                    <tr><td>{{ t.card_power_range }}</td><td>{{ s.us_power_min }} ... {{ s.us_power_max }} dBmV</td></tr>
+                    <tr><td>{{ t.channels }}</td><td>{{ s.us_total }} {{ t.upstream|lower }}</td></tr>
+                    <tr><td>{{ t.card_ideal_range }}</td><td>35 ... 49 dBmV</td></tr>
+                </table>
+            </div>
+        </div>
+
+        {# ── Card 3: Errors ── #}
+        <div class="metric-card health-{{ error_health }}">
+            <div class="metric-card-header" onclick="toggleCard(this.parentNode)">
+                <span class="status-dot"></span>
+                <span class="card-title">{{ t.card_errors }}</span>
+                <span class="chevron">&#9654;</span>
+            </div>
+            <div class="metric-card-body">
+                <div class="metric-row">
+                    <div class="metric-item">
+                        <div class="metric-value val-{{ error_health }}">{{ s.ds_uncorrectable_errors|fmt_k }}<span class="metric-unit">{{ t.card_uncorr_label }}</span></div>
+                        <div class="gauge-bar"><div class="gauge-fill val-{{ error_health }}" style="width:{{ uncorr_pct|int }}%"></div></div>
+                        <div class="metric-secondary">{{ s.ds_correctable_errors|fmt_k }} {{ t.card_corr_label }}</div>
+                    </div>
+                </div>
+                {% if device_info and device_info.uptime_seconds is defined %}
+                {% set ut = device_info.uptime_seconds %}
+                {% set ut_d = ut // 86400 %}
+                {% set ut_h = (ut % 86400) // 3600 %}
+                <div class="metric-secondary" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--input-border);">
+                    &#9201; {{ t.card_uptime }}: <strong>{% if ut_d %}{{ ut_d }}d {% endif %}{{ ut_h }}h</strong>
+                </div>
+                {% endif %}
+            </div>
+            <div class="metric-card-detail">
+                <table class="detail-table">
+                    <tr><td>{{ t.card_uncorr_exact }}</td><td>{{ "{:,}".format(s.ds_uncorrectable_errors) }}</td></tr>
+                    <tr><td>{{ t.card_corr_exact }}</td><td>{{ "{:,}".format(s.ds_correctable_errors) }}</td></tr>
+                </table>
+                <div class="detail-note">{{ t.card_errors_note }}</div>
+            </div>
+        </div>
+
+        {# ── Card 4: Speed (Speedtest Tracker) ── #}
+        {% if speedtest_configured and speedtest_latest %}
+        <div class="metric-card health-good">
+            <div class="metric-card-header" onclick="toggleCard(this.parentNode)">
+                <span class="status-dot"></span>
+                <span class="card-title">&#9889; {{ t.speed }}</span>
+                <span class="chevron">&#9654;</span>
+            </div>
+            <div class="metric-card-body">
+                <div class="metric-row">
+                    <div class="metric-item">
+                        <div class="metric-value val-good">{{ speedtest_latest.download_human or (speedtest_latest.download_mbps ~ ' Mbps') }}</div>
+                        <div class="metric-label">{{ t.download }}</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value val-good">{{ speedtest_latest.upload_human or (speedtest_latest.upload_mbps ~ ' Mbps') }}</div>
+                        <div class="metric-label">{{ t.upload }}</div>
+                    </div>
+                </div>
+                <div class="metric-secondary" style="margin-top:8px;">
+                    {{ t.ping }}: <strong>{{ speedtest_latest.ping_ms }} ms</strong>
+                    <span class="conn-sep">&middot;</span>
+                    {{ t.jitter }}: <strong>{{ speedtest_latest.jitter_ms }} ms</strong>
+                    {% if speedtest_latest.packet_loss_pct > 0 %}
+                    <span class="conn-sep">&middot;</span>
+                    <span class="val-warn">{{ t.packet_loss }}: {{ speedtest_latest.packet_loss_pct }}%</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="metric-card-detail">
+                <table class="detail-table">
+                    <tr><td>{{ t.download }}</td><td>{{ speedtest_latest.download_mbps }} Mbps</td></tr>
+                    <tr><td>{{ t.upload }}</td><td>{{ speedtest_latest.upload_mbps }} Mbps</td></tr>
+                    <tr><td>{{ t.ping }}</td><td>{{ speedtest_latest.ping_ms }} ms</td></tr>
+                    <tr><td>{{ t.jitter }}</td><td>{{ speedtest_latest.jitter_ms }} ms</td></tr>
+                    <tr><td>{{ t.packet_loss }}</td><td>{{ speedtest_latest.packet_loss_pct }}%</td></tr>
+                </table>
+                <div class="detail-note">{{ t.via_speedtest_tracker }}{% if speedtest_latest.timestamp %} &middot; {{ speedtest_latest.timestamp }}{% endif %}</div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <h2 class="section-title">{{ t.downstream }} ({{ ds|length }} {{ t.channels }})</h2>
+    {% for group in ds|groupby('docsis_version')|reverse %}
+    {% set g_crit = group.list|selectattr('health', 'equalto', 'critical')|list|length %}
+    {% set g_warn = group.list|rejectattr('health', 'equalto', 'good')|rejectattr('health', 'equalto', 'critical')|list|length %}
+    <details class="channel-group">
+        <summary>DOCSIS {{ group.grouper }} ({{ group.list|length }} {{ t.channels }}) {% if g_crit %}<span class="badge badge-crit">{{ g_crit }} {{ t.health_critical|lower }}</span>{% elif g_warn %}<span class="badge badge-warn">{{ g_warn }} {{ t.health_warning|lower }}</span>{% else %}<span class="badge badge-good">&#10003;</span>{% endif %}</summary>
+        <table class="sortable">
+            <thead><tr>
+                <th>{{ t.status }}</th><th>{{ t.channel }}</th><th>{{ t.frequency }}</th><th>{{ t.power_dbmv }}</th>
+                <th>{{ t.snr_db }}</th><th>{{ t.modulation }}</th><th>{{ t.corr }}</th><th>{{ t.uncorr }}</th>
+            </tr></thead>
+            <tbody>
+            {% for ch in group.list %}
+            <tr>
+                {% set ch_tips = {"power critical": t.ch_power_critical, "power warning": t.ch_power_warning, "snr critical": t.ch_snr_critical, "snr warning": t.ch_snr_warning} %}
+                {% set ch_tip_parts = [] %}
+                {% for key, label in ch_tips.items() %}{% if key in ch.health_detail %}{% if ch_tip_parts.append(label) %}{% endif %}{% endif %}{% endfor %}
+                <td data-sort="{{ 0 if ch.health == 'good' else (2 if ch.health == 'critical' else 1) }}">
+                    {% if ch.health == "good" %}<span class="badge badge-good">{{ t.health_good }}</span>
+                    {% elif ch.health == "critical" %}<span class="badge badge-crit" title="{{ ch_tip_parts|join(', ') }}">{{ t.health_critical }}</span>
+                    {% else %}<span class="badge badge-warn" title="{{ ch_tip_parts|join(', ') }}">{{ t.health_warning }}</span>{% endif %}
+                </td>
+                <td data-sort="{{ ch.channel_id }}">{{ ch.channel_id }}</td>
+                <td>{{ ch.frequency }}</td>
+                <td data-sort="{{ ch.power if ch.power is not none else 0 }}" class="{% if ch.power is not none %}{% if ch.power|abs > 10 %}val-crit{% elif ch.power|abs > 7 %}val-warn{% else %}val-good{% endif %}{% endif %}">{{ ch.power }}</td>
+                <td data-sort="{{ ch.snr if ch.snr is not none else 0 }}" class="{% if ch.snr is not none %}{% if ch.snr < 25 %}val-crit{% elif ch.snr < 30 %}val-warn{% else %}val-good{% endif %}{% endif %}">{{ ch.snr if ch.snr is not none else "-" }}</td>
+                <td>{{ ch.modulation }}</td>
+                <td data-sort="{{ ch.correctable_errors }}">{{ ch.correctable_errors|fmt_k }}</td>
+                <td data-sort="{{ ch.uncorrectable_errors }}">{{ ch.uncorrectable_errors|fmt_k }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </details>
+    {% endfor %}
+
+    <h2 class="section-title">{{ t.upstream }} ({{ us|length }} {{ t.channels }})</h2>
+    {% for group in us|groupby('docsis_version')|reverse %}
+    {% set g_crit = group.list|selectattr('health', 'equalto', 'critical')|list|length %}
+    {% set g_warn = group.list|rejectattr('health', 'equalto', 'good')|rejectattr('health', 'equalto', 'critical')|list|length %}
+    <details class="channel-group">
+        <summary>DOCSIS {{ group.grouper }} ({{ group.list|length }} {{ t.channels }}) {% if g_crit %}<span class="badge badge-crit">{{ g_crit }} {{ t.health_critical|lower }}</span>{% elif g_warn %}<span class="badge badge-warn">{{ g_warn }} {{ t.health_warning|lower }}</span>{% else %}<span class="badge badge-good">&#10003;</span>{% endif %}</summary>
+        <table class="sortable">
+            <thead><tr>
+                <th>{{ t.status }}</th><th>{{ t.channel }}</th><th>{{ t.frequency }}</th><th>{{ t.power_dbmv }}</th>
+                <th>{{ t.modulation }}</th><th>{{ t.multiplex }}</th>
+            </tr></thead>
+            <tbody>
+            {% for ch in group.list %}
+            {% set ch_tip = t.ch_power_critical if 'power critical' in ch.health_detail else (t.ch_power_warning if 'power warning' in ch.health_detail else '') %}
+            <tr>
+                <td data-sort="{{ 0 if ch.health == 'good' else (2 if ch.health == 'critical' else 1) }}">
+                    {% if ch.health == "good" %}<span class="badge badge-good">{{ t.health_good }}</span>
+                    {% elif ch.health == "critical" %}<span class="badge badge-crit" title="{{ ch_tip }}">{{ t.health_critical }}</span>
+                    {% else %}<span class="badge badge-warn" title="{{ ch_tip }}">{{ t.health_warning }}</span>{% endif %}
+                </td>
+                <td data-sort="{{ ch.channel_id }}">{{ ch.channel_id }}</td>
+                <td>{{ ch.frequency }}</td>
+                <td data-sort="{{ ch.power }}" class="{% if ch.power > 54 %}val-crit{% elif ch.power > 50 %}val-warn{% else %}val-good{% endif %}">{{ ch.power }}</td>
+                <td>{{ ch.modulation }}</td>
+                <td>{{ ch.multiplex }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </details>
+    {% endfor %}
+    {% if not has_us_ofdma %}
+    <div class="card-notice card-notice-warn" style="margin-top:8px;">
+        <span>&#9888;</span> {{ t.card_no_docsis31 }}
+    </div>
+    {% endif %}
+
+{% elif not error %}
+    <div class="waiting">
+        <div class="spinner"></div>
+        <p>{{ t.waiting_msg }}</p>
+    </div>
+{% endif %}
+</div>
+
+<!-- ═══ View: Trends ═══ -->
+<div id="view-trends" class="view">
+    <div class="trend-header">
+        <span class="trend-title" id="trend-title"></span>
+        <div class="trend-tabs" id="trend-tabs">
+            <button class="trend-tab active" data-range="day">{{ t.day }}</button>
+            <button class="trend-tab" data-range="week">{{ t.week }}</button>
+            <button class="trend-tab" data-range="month">{{ t.month }}</button>
+        </div>
+    </div>
+    <div id="trend-no-data" class="no-data-msg" style="display:none"></div>
+    <div class="charts-grid" id="charts-grid">
+        <div class="chart-card">
+            <div class="chart-label">{{ t.ds_power_avg }}</div>
+            <canvas id="chart-ds-power"></canvas>
+        </div>
+        <div class="chart-card">
+            <div class="chart-label">{{ t.ds_snr_avg }}</div>
+            <canvas id="chart-ds-snr"></canvas>
+        </div>
+        <div class="chart-card">
+            <div class="chart-label">{{ t.us_power_avg }}</div>
+            <canvas id="chart-us-power"></canvas>
+        </div>
+        <div class="chart-card">
+            <div class="chart-label">{{ t.errors }}</div>
+            <canvas id="chart-errors"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ View: BQM Graphs ═══ -->
+{% if bqm_configured %}
+<div id="view-bqm" class="view">
+    <div class="trend-header">
+        <span class="trend-title">{{ t.bqm_title }}</span>
+    </div>
+    <div id="bqm-content">
+        <div id="bqm-image-wrap" style="text-align:center;">
+            <img id="bqm-image" style="max-width:100%; border-radius:8px; display:none;" alt="BQM Graph">
+        </div>
+        <div id="bqm-no-data" class="no-data-msg" style="display:none;"></div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ═══ View: Speedtest ═══ -->
+{% if speedtest_configured %}
+<div id="view-speedtest" class="view">
+    <div class="trend-header">
+        <span class="trend-title">{{ t.speedtest_tracker }}</span>
+        <div style="display:flex; gap:8px; align-items:center;">
+            <select id="speedtest-days" style="padding:6px 10px; border-radius:6px; border:1px solid var(--input-border); background:var(--surface); color:var(--text);" onchange="filterSpeedtestData()">
+                <option value="1">1 {{ t.day }}</option>
+                <option value="7" selected>7 {{ t.day }}</option>
+                <option value="14">14 {{ t.day }}</option>
+                <option value="30">30 {{ t.day }}</option>
+                <option value="90">90 {{ t.day }}</option>
+                <option value="all">{{ t.fetch_all }}</option>
+            </select>
+            <button class="refresh-btn" id="speedtest-refresh-btn" title="{{ t.refresh }}" onclick="loadSpeedtestHistory()">&#x1F504;</button>
+        </div>
+    </div>
+    <div id="speedtest-loading" class="waiting" style="display:none;">
+        <div class="spinner"></div>
+        <p>{{ t.fetching }}</p>
+    </div>
+    <div id="speedtest-no-data" class="no-data-msg" style="display:none;"></div>
+    <div id="speedtest-chart-container" style="display:none;">
+        <div class="speedtest-chart-wrap">
+            <canvas id="speedtest-chart"></canvas>
+            <div class="speedtest-chart-tooltip" id="speedtest-chart-tooltip"></div>
+            <div class="speedtest-chart-legend">
+                <span class="legend-dl">Download (Mbps)</span>
+                <span class="legend-ul">Upload (Mbps)</span>
+                <span class="legend-ping">Ping (ms)</span>
+                <span class="legend-thresh">80% Median DL</span>
+            </div>
+        </div>
+    </div>
+    <div id="speedtest-table-wrap">
+        <table id="speedtest-table" class="sortable" style="display:none;">
+            <thead><tr>
+                <th data-col="timestamp">{{ t.timestamp }}<span class="sort-indicator">▼</span></th>
+                <th data-col="download_mbps">{{ t.download }}<span class="sort-indicator"></span></th>
+                <th data-col="upload_mbps">{{ t.upload }}<span class="sort-indicator"></span></th>
+                <th data-col="ping_ms">{{ t.ping }}<span class="sort-indicator"></span></th>
+                <th data-col="jitter_ms">{{ t.jitter }}<span class="sort-indicator"></span></th>
+                <th data-col="packet_loss_pct">{{ t.packet_loss }}<span class="sort-indicator"></span></th>
+            </tr></thead>
+            <tbody id="speedtest-tbody"></tbody>
+        </table>
+        <div id="speedtest-show-more" style="text-align:center; padding:12px; display:none;">
+            <button class="btn btn-muted" id="speedtest-more-btn" onclick="showMoreSpeedtest()"></button>
+        </div>
+    </div>
+</div>
+{% endif %}
+</div><!-- /main-content -->
+</div><!-- /app-main -->
+</div><!-- /app-layout -->
+
+<!-- Speedtest Setup Modal -->
+<div class="modal-overlay" id="speedtest-setup-modal" onclick="if(event.target===this)closeSpeedtestSetupModal()">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>&#9889; {{ t.speedtest_setup_title }}</h2>
+            <button class="modal-close" onclick="closeSpeedtestSetupModal()">&times;</button>
+        </div>
+        <div class="modal-body" style="padding: 10px 0; font-size: 0.9em; line-height: 1.6;">
+            <p style="margin-bottom:12px;">{{ t.speedtest_setup_intro }}</p>
+            <div style="background:var(--bg); border-radius:8px; padding:14px; margin-bottom:14px;">
+                <p style="font-weight:bold; margin-bottom:8px; color:var(--accent);">{{ t.speedtest_setup_benefits_title }}</p>
+                <ul style="list-style:none; padding:0;">
+                    <li style="margin-bottom:6px;">&#10003; {{ t.speedtest_setup_benefit_1 }}</li>
+                    <li style="margin-bottom:6px;">&#10003; {{ t.speedtest_setup_benefit_2 }}</li>
+                    <li style="margin-bottom:6px;">&#10003; {{ t.speedtest_setup_benefit_3 }}</li>
+                </ul>
+            </div>
+            <div style="background:var(--bg); border-radius:8px; padding:14px;">
+                <p style="font-weight:bold; margin-bottom:8px; color:var(--accent);">{{ t.speedtest_setup_howto_title }}</p>
+                <ol style="padding-left:20px;">
+                    <li style="margin-bottom:6px;">{{ t.speedtest_setup_step_1|safe }}</li>
+                    <li style="margin-bottom:6px;">{{ t.speedtest_setup_step_2|safe }}</li>
+                    <li style="margin-bottom:6px;">{{ t.speedtest_setup_step_3|safe }}</li>
+                </ol>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-muted" onclick="closeSpeedtestSetupModal()">{{ t.close }}</button>
+            <a class="btn btn-accent" href="/settings" style="text-decoration:none;">&#9881; {{ t.settings }}</a>
+        </div>
+    </div>
+</div>
+
+<!-- BQM Setup Modal -->
+<div class="modal-overlay" id="bqm-setup-modal" onclick="if(event.target===this)closeBqmSetupModal()">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>&#128200; {{ t.bqm_setup_title }}</h2>
+            <button class="modal-close" onclick="closeBqmSetupModal()">&times;</button>
+        </div>
+        <div class="modal-body" style="padding: 10px 0; font-size: 0.9em; line-height: 1.6;">
+            <p style="margin-bottom:12px;">{{ t.bqm_setup_intro }}</p>
+            <div style="background:var(--bg); border-radius:8px; padding:14px; margin-bottom:14px;">
+                <p style="font-weight:bold; margin-bottom:8px; color:var(--accent);">{{ t.bqm_setup_benefits_title }}</p>
+                <ul style="list-style:none; padding:0;">
+                    <li style="margin-bottom:6px;">✅ {{ t.bqm_setup_benefit_1 }}</li>
+                    <li style="margin-bottom:6px;">✅ {{ t.bqm_setup_benefit_2 }}</li>
+                    <li style="margin-bottom:6px;">✅ {{ t.bqm_setup_benefit_3 }}</li>
+                </ul>
+            </div>
+            <div style="background:var(--bg); border-radius:8px; padding:14px;">
+                <p style="font-weight:bold; margin-bottom:8px; color:var(--accent);">{{ t.bqm_setup_howto_title }}</p>
+                <ol style="padding-left:20px;">
+                    <li style="margin-bottom:6px;">{{ t.bqm_setup_step_1|safe }}</li>
+                    <li style="margin-bottom:6px;">{{ t.bqm_setup_step_2|safe }}</li>
+                    <li style="margin-bottom:6px;">{{ t.bqm_setup_step_3|safe }}</li>
+                    <li style="margin-bottom:6px;">{{ t.bqm_setup_step_4|safe }}</li>
+                </ol>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-muted" onclick="closeBqmSetupModal()">{{ t.close }}</button>
+            <a class="btn btn-accent" href="/settings" style="text-decoration:none;">&#9881; {{ t.settings }}</a>
+        </div>
+    </div>
+</div>
+
+<!-- Report Modal -->
+<div class="modal-overlay" id="report-modal" onclick="if(event.target===this)closeReportModal()">
+    <div class="modal" style="max-width:800px;">
+        <div class="modal-header">
+            <h2>{{ t.incident_report }}</h2>
+            <button class="modal-close" onclick="closeReportModal()">&times;</button>
+        </div>
+        <p class="modal-hint">{{ t.report_description }}</p>
+        <div class="modal-body" style="padding: 10px 0;">
+            <!-- Step 1: Settings & Customer Info -->
+            <div id="report-step1">
+                <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:14px;">
+                    <div>
+                        <label style="font-size:13px; color:var(--muted);">{{ t.report_days }}</label><br>
+                        <select id="report-days" style="margin-top:4px; padding:6px 10px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text);">
+                            <option value="1">1</option><option value="3">3</option>
+                            <option value="7" selected>7</option><option value="14">14</option>
+                            <option value="30">30</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:13px; color:var(--muted);">{{ t.report_language }}</label><br>
+                        <select id="report-lang" style="margin-top:4px; padding:6px 10px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text);">
+                            {% for code, name in languages.items() %}
+                            <option value="{{ code }}" {% if code == lang %}selected{% endif %}>{{ lang_flags.get(code, '') }} {{ name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div style="background:var(--bg); border-radius:8px; padding:14px; margin-bottom:10px;">
+                    <p style="font-size:13px; color:var(--muted); margin-bottom:10px;">{{ t.report_customer_hint }}</p>
+                    <div style="display:flex; flex-direction:column; gap:8px;">
+                        <input id="report-name" type="text" placeholder="{{ t.report_name }}" style="padding:8px 12px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-family:inherit;">
+                        <input id="report-number" type="text" placeholder="{{ t.report_customer_number }}" style="padding:8px 12px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-family:inherit;">
+                        <input id="report-address" type="text" placeholder="{{ t.report_address }}" style="padding:8px 12px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-family:inherit;">
+                    </div>
+                </div>
+            </div>
+            <!-- Step 2: Generated complaint text (hidden initially) -->
+            <div id="report-step2" style="display:none;">
+                <p style="font-size:13px; color:var(--muted); margin-bottom:8px;">{{ t.report_edit_hint }}</p>
+                <textarea id="report-complaint-text" style="width:100%; min-height:320px; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:12px; font-size:0.85em; font-family:'Consolas','Monaco',monospace; resize:vertical; line-height:1.5;"></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-muted" onclick="closeReportModal()">{{ t.close }}</button>
+            <button class="btn btn-accent" id="report-generate-btn" onclick="generateComplaint()">&#9998; {{ t.report_generate_letter }}</button>
+            <button class="btn btn-accent" id="report-copy-btn" style="display:none;" onclick="copyComplaint()">&#128203; {{ t.report_copy_letter }}</button>
+            <button class="btn btn-accent" id="report-pdf-btn" style="display:none;" onclick="downloadReport()">&#128196; {{ t.report_download_pdf }}</button>
+        </div>
+    </div>
+</div>
+
+<!-- Export Modal -->
+<div class="modal-overlay" id="export-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>{{ t.export_title }}</h2>
+            <button class="modal-close" onclick="closeExportModal()">&times;</button>
+        </div>
+        <p class="modal-hint">{{ t.export_hint }}</p>
+        <div class="modal-body">
+            <textarea id="export-text" readonly></textarea>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-muted" onclick="closeExportModal()">{{ t.close }}</button>
+            <button class="btn btn-accent" id="export-copy-btn" onclick="copyExport()">{{ t.copy_clipboard }}</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+    'use strict';
+
+    var T = {{ t|tojson }};
+
+    /* ── Theme ── */
+    var saved = localStorage.getItem('docsis-theme');
+    if (saved) document.documentElement.setAttribute('data-theme', saved);
+
+    var themeBtn = document.getElementById('theme-toggle');
+    function updateThemeIcon() {
+        var isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+        themeBtn.innerHTML = isDark ? '&#9788;' : '&#9790;';
+    }
+    updateThemeIcon();
+    themeBtn.addEventListener('click', function() {
+        var isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+        var next = isDark ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('docsis-theme', next);
+        updateThemeIcon();
+    });
+
+    document.getElementById('lang-select').addEventListener('change', function() {
+        var url = new URL(window.location);
+        url.searchParams.set('lang', this.value);
+        window.location.href = url.toString();
+    });
+
+    /* ── State ── */
+    var currentView = 'live';
+    var selectedDate = todayStr();
+    var calendarMonth = new Date();
+    var datesWithData = [];
+    var charts = {};
+    var calendarLoaded = false;
+    var _trendRange = 'day';
+    var isHistorical = {{ 'true' if historical else 'false' }};
+
+    function todayStr() {
+        var d = new Date();
+        return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+    }
+    function pad(n) { return n < 10 ? '0' + n : '' + n; }
+    function formatDateDE(str) {
+        var p = str.split('-');
+        return p[2] + '.' + p[1] + '.' + p[0];
+    }
+
+    /* ── Sortable Tables ── */
+    function initSortableTables() {
+        document.querySelectorAll('table.sortable').forEach(function(table) {
+            var headers = table.querySelectorAll('th');
+            headers.forEach(function(th, colIdx) {
+                th.addEventListener('click', function() {
+                    sortTable(table, colIdx, th);
+                });
+            });
+        });
+    }
+    initSortableTables();
+
+    function sortTable(table, colIdx, th) {
+        var tbody = table.querySelector('tbody');
+        var rows = Array.from(tbody.querySelectorAll('tr'));
+        var asc = th.getAttribute('data-sort-dir') !== 'asc';
+
+        table.querySelectorAll('th').forEach(function(h) {
+            h.removeAttribute('data-sort-dir');
+            h.classList.remove('sort-asc', 'sort-desc');
+        });
+        th.setAttribute('data-sort-dir', asc ? 'asc' : 'desc');
+        th.classList.add(asc ? 'sort-asc' : 'sort-desc');
+
+        rows.sort(function(a, b) {
+            var cellA = a.cells[colIdx];
+            var cellB = b.cells[colIdx];
+            var valA = cellA.getAttribute('data-sort') || cellA.textContent.trim();
+            var valB = cellB.getAttribute('data-sort') || cellB.textContent.trim();
+            var numA = parseFloat(valA);
+            var numB = parseFloat(valB);
+            if (!isNaN(numA) && !isNaN(numB)) {
+                return asc ? numA - numB : numB - numA;
+            }
+            return asc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        });
+        rows.forEach(function(row) { tbody.appendChild(row); });
+    }
+
+    /* ── Sidebar ── */
+    var sidebar = document.getElementById('sidebar');
+
+    function collapseSidebar() { sidebar.classList.add('collapsed'); }
+    function expandSidebar() { sidebar.classList.remove('collapsed'); }
+
+    document.getElementById('sidebar-collapse').addEventListener('click', collapseSidebar);
+    document.getElementById('hamburger').addEventListener('click', function() {
+        sidebar.classList.toggle('collapsed');
+    });
+
+    var sidebarLinks = document.querySelectorAll('.sidebar-link[data-view]');
+    sidebarLinks.forEach(function(link) {
+        link.addEventListener('click', function() {
+            switchView(this.getAttribute('data-view'));
+        });
+    });
+
+    function switchView(view, skipHash) {
+        currentView = view;
+        if (!skipHash) location.hash = view === 'live' ? '' : view;
+        sidebarLinks.forEach(function(l) {
+            l.classList.toggle('active', l.getAttribute('data-view') === view);
+        });
+        var dashView = document.getElementById('view-dashboard');
+        var trendView = document.getElementById('view-trends');
+        var bqmView = document.getElementById('view-bqm');
+        var speedtestView = document.getElementById('view-speedtest');
+        dashView.classList.remove('active');
+        trendView.classList.remove('active');
+        if (bqmView) bqmView.classList.remove('active');
+        if (speedtestView) speedtestView.classList.remove('active');
+        stopAutoRefresh();
+        if (view === 'live') {
+            dashView.classList.add('active');
+            updateDateLabel();
+            if (!isHistorical) startAutoRefresh();
+        } else if (view === 'bqm') {
+            if (bqmView) bqmView.classList.add('active');
+            updateDateLabel();
+            loadBqmGraph(selectedDate);
+        } else if (view === 'speedtest') {
+            if (speedtestView) speedtestView.classList.add('active');
+            updateDateLabel();
+            loadSpeedtestHistory();
+        } else if (view === 'trends') {
+            trendView.classList.add('active');
+            updateTrendTabs();
+            updateDateLabel();
+            loadTrends(_trendRange, selectedDate);
+        }
+    }
+
+    /* ── Trend Tabs ── */
+    function updateTrendTabs() {
+        document.querySelectorAll('#trend-tabs .trend-tab').forEach(function(btn) {
+            btn.classList.toggle('active', btn.getAttribute('data-range') === _trendRange);
+        });
+    }
+    document.querySelectorAll('#trend-tabs .trend-tab').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            _trendRange = this.getAttribute('data-range');
+            updateTrendTabs();
+            updateDateLabel();
+            loadTrends(_trendRange, selectedDate);
+        });
+    });
+
+    /* ── Hash-based view routing ── */
+    var validViews = ['live', 'trends', 'bqm', 'speedtest'];
+    function viewFromHash() {
+        var h = location.hash.replace('#', '');
+        return validViews.indexOf(h) !== -1 ? h : null;
+    }
+    window.addEventListener('hashchange', function() {
+        var v = viewFromHash();
+        if (v && v !== currentView) switchView(v, true);
+    });
+
+    /* ── Date Navigation ── */
+    var dateLabel = document.getElementById('date-label');
+    var datePrev = document.getElementById('date-prev');
+    var dateNext = document.getElementById('date-next');
+
+    function updateDateLabel() {
+        var trendTabs = document.getElementById('trend-tabs');
+        if (currentView === 'live') {
+            dateLabel.textContent = isHistorical ? formatDateDE('{{ snapshot_ts[:10] if snapshot_ts else "" }}') : T.live;
+        } else if (currentView === 'bqm') {
+            dateLabel.textContent = formatDateDE(selectedDate) + ' (BQM)';
+        } else if (currentView === 'speedtest') {
+            dateLabel.textContent = T.speedtest || 'Speedtest';
+        } else if (currentView === 'trends') {
+            var rangeLabel = {day: T.day, week: T.week, month: T.month}[_trendRange] || '';
+            if (selectedDate === todayStr()) {
+                dateLabel.textContent = T.live + ' (' + rangeLabel + ')';
+            } else {
+                dateLabel.textContent = formatDateDE(selectedDate) + ' (' + rangeLabel + ')';
+            }
+            // Hide tabs when viewing historical data (not today)
+            if (trendTabs) {
+                trendTabs.style.display = (selectedDate === todayStr()) ? '' : 'none';
+            }
+        }
+        // Show tabs again when switching to trends with today's date
+        if (currentView !== 'trends' && trendTabs) {
+            trendTabs.style.display = '';
+        }
+    }
+
+    datePrev.addEventListener('click', function() { dateNav(-1); });
+    dateNext.addEventListener('click', function() { dateNav(1); });
+
+    function dateNav(dir) {
+        var d = new Date(selectedDate + 'T12:00:00');
+        var navRange = currentView === 'trends' ? _trendRange : currentView;
+        if (navRange === 'live' || navRange === 'day' || navRange === 'bqm') {
+            d.setDate(d.getDate() + dir);
+        } else if (navRange === 'week') {
+            d.setDate(d.getDate() + dir * 7);
+        } else if (navRange === 'month') {
+            d.setMonth(d.getMonth() + dir);
+        }
+        selectedDate = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+        updateDateLabel();
+        if (currentView === 'live') {
+            fetch('/api/snapshot/daily?date=' + selectedDate)
+                .then(function(r) { return r.json(); })
+                .then(function(snap) {
+                    if (snap && snap.timestamp) {
+                        window.location.href = '/?t=' + encodeURIComponent(snap.timestamp);
+                    }
+                });
+        } else if (currentView === 'bqm') {
+            loadBqmGraph(selectedDate);
+        } else if (currentView === 'trends') {
+            // Force day view when navigating to historical dates
+            if (selectedDate !== todayStr()) {
+                _trendRange = 'day';
+            }
+            loadTrends(_trendRange, selectedDate);
+        }
+    }
+
+    /* ── Calendar ── */
+    var calPopup = document.getElementById('calendar-popup');
+
+    dateLabel.addEventListener('click', function(e) {
+        e.stopPropagation();
+        calPopup.classList.toggle('open');
+        if (calPopup.classList.contains('open') && !calendarLoaded) {
+            loadCalendarData();
+        } else if (calPopup.classList.contains('open')) {
+            renderCalendar();
+        }
+    });
+    document.addEventListener('click', function(e) {
+        if (!calPopup.contains(e.target) && e.target !== dateLabel) {
+            calPopup.classList.remove('open');
+        }
+    });
+    document.getElementById('cal-prev').addEventListener('click', function() {
+        calendarMonth.setMonth(calendarMonth.getMonth() - 1);
+        renderCalendar();
+    });
+    document.getElementById('cal-next').addEventListener('click', function() {
+        calendarMonth.setMonth(calendarMonth.getMonth() + 1);
+        renderCalendar();
+    });
+
+    var bqmDates = [];
+
+    function loadCalendarData() {
+        fetch('/api/calendar')
+            .then(function(r) { return r.json(); })
+            .then(function(dates) {
+                datesWithData = dates;
+                calendarLoaded = true;
+                renderCalendar();
+            });
+        fetch('/api/bqm/dates')
+            .then(function(r) { return r.json(); })
+            .then(function(dates) { bqmDates = dates || []; })
+            .catch(function() {});
+    }
+
+    function renderCalendar() {
+        var year = calendarMonth.getFullYear();
+        var month = calendarMonth.getMonth();
+        document.getElementById('cal-month-label').textContent = T.months[month] + ' ' + year;
+        var grid = document.getElementById('cal-days');
+        grid.innerHTML = '';
+        var firstDay = new Date(year, month, 1).getDay();
+        var offset = (firstDay === 0) ? 6 : firstDay - 1;
+        var daysInMonth = new Date(year, month + 1, 0).getDate();
+        var today = todayStr();
+        for (var i = 0; i < offset; i++) {
+            var empty = document.createElement('span');
+            empty.className = 'cal-day empty';
+            grid.appendChild(empty);
+        }
+        for (var d = 1; d <= daysInMonth; d++) {
+            var dateStr = year + '-' + pad(month + 1) + '-' + pad(d);
+            var el = document.createElement('span');
+            el.className = 'cal-day';
+            el.textContent = d;
+            var activeDates = (currentView === 'bqm') ? bqmDates : datesWithData;
+            if (activeDates.indexOf(dateStr) !== -1) el.classList.add('has-data');
+            if (dateStr === today) el.classList.add('today');
+            if (dateStr === selectedDate) el.classList.add('selected');
+            el.setAttribute('data-date', dateStr);
+            el.addEventListener('click', function() {
+                var date = this.getAttribute('data-date');
+                if (!this.classList.contains('has-data')) return;
+                selectedDate = date;
+                calPopup.classList.remove('open');
+                if (currentView === 'live') {
+                    fetch('/api/snapshot/daily?date=' + date)
+                        .then(function(r) { return r.json(); })
+                        .then(function(snap) {
+                            if (snap && snap.timestamp) {
+                                window.location.href = '/?t=' + encodeURIComponent(snap.timestamp);
+                            }
+                        });
+                } else if (currentView === 'bqm') {
+                    updateDateLabel();
+                    loadBqmGraph(selectedDate);
+                } else if (currentView === 'trends') {
+                    updateDateLabel();
+                    loadTrends(_trendRange, selectedDate);
+                }
+            });
+            grid.appendChild(el);
+        }
+    }
+
+    /* ── Auto Refresh ── */
+    var refreshTimer = null;
+    function startAutoRefresh() {
+        stopAutoRefresh();
+        refreshTimer = setInterval(function() {
+            if (currentView === 'live' && !isHistorical && !document.hidden) {
+                refreshData();
+            }
+        }, 60000);
+    }
+    function stopAutoRefresh() {
+        if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+    }
+
+    function refreshData() {
+        fetch(window.location.href)
+            .then(function(r) { return r.text(); })
+            .then(function(html) {
+                var doc = new DOMParser().parseFromString(html, 'text/html');
+
+                // Save expanded metric cards by index
+                var openCardIndices = [];
+                document.querySelectorAll('.metric-card').forEach(function(el, i) {
+                    if (el.classList.contains('open')) openCardIndices.push(i);
+                });
+
+                // Save expanded channel groups by label text
+                var openGroupLabels = [];
+                document.querySelectorAll('details.channel-group[open]').forEach(function(el) {
+                    var s = el.querySelector('summary');
+                    if (s) openGroupLabels.push(s.textContent.trim());
+                });
+
+                // Replace dashboard content
+                var freshDash = doc.querySelector('#view-dashboard');
+                var currentDash = document.querySelector('#view-dashboard');
+                if (freshDash && currentDash) {
+                    currentDash.innerHTML = freshDash.innerHTML;
+                }
+
+                // Update topbar timestamp
+                var freshMeta = doc.querySelector('#topbar-meta');
+                var currentMeta = document.querySelector('#topbar-meta');
+                if (freshMeta && currentMeta) {
+                    currentMeta.innerHTML = freshMeta.innerHTML;
+                }
+
+                // Restore expanded metric cards
+                document.querySelectorAll('.metric-card').forEach(function(el, i) {
+                    if (openCardIndices.indexOf(i) !== -1) el.classList.add('open');
+                });
+
+                // Restore expanded channel groups
+                document.querySelectorAll('details.channel-group').forEach(function(el) {
+                    var s = el.querySelector('summary');
+                    if (s && openGroupLabels.indexOf(s.textContent.trim()) !== -1) {
+                        el.setAttribute('open', '');
+                    }
+                });
+
+                // Re-init sortable tables (event listeners lost on innerHTML replace)
+                initSortableTables();
+            })
+            .catch(function(err) {
+                console.warn('Auto-refresh failed:', err);
+            });
+    }
+
+    if (!isHistorical && currentView === 'live') startAutoRefresh();
+
+    /* ── Manual Poll (Refresh Button) ── */
+    var refreshBtn = document.getElementById('refresh-btn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', function() {
+            if (refreshBtn.disabled) return;
+            refreshBtn.disabled = true;
+            refreshBtn.classList.add('spinning');
+            fetch('/api/poll', {method: 'POST'})
+                .then(function(r) { return r.json().then(function(d) { return {status: r.status, data: d}; }); })
+                .then(function(res) {
+                    if (res.data.success) {
+                        showToast(T.refresh_success || 'Data updated', 'success');
+                        refreshData();
+                    } else {
+                        showToast(res.data.error || 'Error', res.status === 429 ? 'error' : 'error');
+                    }
+                })
+                .catch(function() { showToast(T.network_error || 'Error', 'error'); })
+                .finally(function() {
+                    refreshBtn.classList.remove('spinning');
+                    setTimeout(function() { refreshBtn.disabled = false; }, 10000);
+                });
+        });
+    }
+
+    function showToast(msg, type) {
+        var toast = document.getElementById('toast');
+        toast.textContent = msg;
+        toast.className = 'toast toast-' + (type || 'success') + ' show';
+        setTimeout(function() { toast.classList.remove('show'); }, 3000);
+    }
+
+    /* ── Trend Charts ── */
+    var DS_POWER_ZONES = [
+        {min: -15, max: -10, color: "rgba(244,67,54,0.35)"},
+        {min: -10, max: -7, color: "rgba(255,152,0,0.30)"},
+        {min: -7, max: 7, color: "rgba(76,175,80,0.25)"},
+        {min: 7, max: 10, color: "rgba(255,152,0,0.30)"},
+        {min: 10, max: 15, color: "rgba(244,67,54,0.35)"},
+        {yMin: -12, yMax: 12}
+    ];
+    var DS_SNR_ZONES = [
+        {min: 15, max: 30, color: "rgba(244,67,54,0.35)"},
+        {min: 30, max: 35, color: "rgba(255,152,0,0.30)"},
+        {min: 35, max: 50, color: "rgba(76,175,80,0.25)"},
+        {yMin: 25, yMax: 45}
+    ];
+    var US_POWER_ZONES = [
+        {min: 20, max: 30, color: "rgba(244,67,54,0.35)"},
+        {min: 30, max: 35, color: "rgba(255,152,0,0.30)"},
+        {min: 35, max: 50, color: "rgba(76,175,80,0.25)"},
+        {min: 50, max: 55, color: "rgba(255,152,0,0.30)"},
+        {min: 55, max: 65, color: "rgba(244,67,54,0.35)"},
+        {yMin: 25, yMax: 60}
+    ];
+
+    function loadTrends(range, date) {
+        var title = document.getElementById('trend-title');
+        var noData = document.getElementById('trend-no-data');
+        var grid = document.getElementById('charts-grid');
+        var labels = {day: T.day_trend, week: T.week_trend, month: T.month_trend};
+        title.textContent = (labels[range] || 'Trend') + ' - ' + formatDateDE(date);
+
+        fetch('/api/trends?range=' + range + '&date=' + date)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data || data.length === 0) {
+                    noData.textContent = T.no_data;
+                    noData.style.display = 'block';
+                    grid.style.display = 'none';
+                    return;
+                }
+                noData.style.display = 'none';
+                grid.style.display = '';
+                var xLabels = data.map(function(d) {
+                    if (range === 'day') return d.timestamp ? d.timestamp.substring(11, 16) : '';
+                    return d.date ? formatDateDE(d.date) : '';
+                });
+                renderChart('chart-ds-power', xLabels,
+                    [{label: 'DS Power Avg', data: data.map(function(d){ return d.ds_power_avg; }), color: '#00e5f0'}],
+                    null, DS_POWER_ZONES);
+                renderChart('chart-ds-snr', xLabels,
+                    [{label: 'DS SNR Avg', data: data.map(function(d){ return d.ds_snr_avg; }), color: '#66ff77'}],
+                    null, DS_SNR_ZONES);
+                renderChart('chart-us-power', xLabels,
+                    [{label: 'US Power Avg', data: data.map(function(d){ return d.us_power_avg; }), color: '#ffbb33'}],
+                    null, US_POWER_ZONES);
+                renderChart('chart-errors', xLabels, [
+                    {label: T.correctable, data: data.map(function(d){ return d.ds_correctable_errors; }), color: '#2196f3'},
+                    {label: T.uncorrectable, data: data.map(function(d){ return d.ds_uncorrectable_errors; }), color: '#f44336'}
+                ], 'bar');
+            })
+            .catch(function() {
+                noData.textContent = T.trend_error;
+                noData.style.display = 'block';
+                grid.style.display = 'none';
+            });
+    }
+
+    var zonesPlugin = {
+        id: 'zones',
+        beforeDatasetsDraw: function(chart) {
+            var zones = chart._docsightZones;
+            if (!zones) return;
+            var ctx = chart.ctx;
+            var yAxis = chart.scales.y;
+            var xAxis = chart.scales.x;
+            var isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+            var lineColor = isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.2)';
+            // Clip to chart area only (don't bleed into axis labels)
+            var chartArea = chart.chartArea;
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(chartArea.left, chartArea.top, chartArea.right - chartArea.left, chartArea.bottom - chartArea.top);
+            ctx.clip();
+            var drawn = {};
+            zones.forEach(function(z) {
+                var top = yAxis.getPixelForValue(z.max);
+                var bottom = yAxis.getPixelForValue(z.min);
+                ctx.fillStyle = z.color;
+                ctx.fillRect(chartArea.left, top, chartArea.right - chartArea.left, bottom - top);
+                // Draw dashed boundary lines at zone edges in zone color
+                var zoneBaseColor = z.color.replace(/[\d.]+\)$/, '0.7)');
+                [z.min, z.max].forEach(function(val) {
+                    if (drawn[val]) return;
+                    drawn[val] = true;
+                    var py = yAxis.getPixelForValue(val);
+                    ctx.beginPath();
+                    ctx.setLineDash([6, 4]);
+                    ctx.strokeStyle = zoneBaseColor;
+                    ctx.lineWidth = 1.5;
+                    ctx.moveTo(chartArea.left, py);
+                    ctx.lineTo(chartArea.right, py);
+                    ctx.stroke();
+                });
+            });
+            ctx.restore();
+        }
+    };
+
+    function renderChart(canvasId, labels, datasets, type, zones) {
+        if (charts[canvasId]) charts[canvasId].destroy();
+        var ctx = document.getElementById(canvasId);
+        if (!ctx) return;
+        var isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+        var gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+        var textColor = isDark ? '#888' : '#666';
+        var chartDatasets = datasets.map(function(ds) {
+            return {
+                label: ds.label, data: ds.data,
+                borderColor: ds.color,
+                backgroundColor: ds.color + (type === 'bar' ? 'cc' : '22'),
+                borderWidth: 3, tension: 0.3,
+                pointRadius: labels.length > 30 ? 0 : 3,
+                fill: type !== 'bar'
+            };
+        });
+        var hasLegend = datasets.length > 1;
+        var legendPos = hasLegend ? 'bottom' : 'top';
+        var chartConfig = {
+            type: type || 'line',
+            data: { labels: labels, datasets: chartDatasets },
+            options: {
+                responsive: true, maintainAspectRatio: true,
+                interaction: { intersect: false, mode: 'index' },
+                plugins: {
+                    legend: { display: hasLegend, position: legendPos, labels: { color: textColor, font: { size: 11 } } },
+                    tooltip: { backgroundColor: isDark ? '#16213e' : '#fff', titleColor: textColor, bodyColor: textColor, borderColor: gridColor, borderWidth: 1 }
+                },
+                scales: {
+                    x: { ticks: { color: textColor, font: { size: 10 }, maxRotation: 45 }, grid: { color: gridColor } },
+                    y: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor } }
+                }
+            },
+            plugins: zones ? [zonesPlugin] : []
+        };
+        if (zones) {
+            // Filter out the yMin/yMax metadata entry and use it for axis limits
+            var zoneMeta = zones.find(function(z) { return z.yMin !== undefined; });
+            if (zoneMeta) {
+                chartConfig.options.scales.y.suggestedMin = zoneMeta.yMin;
+                chartConfig.options.scales.y.suggestedMax = zoneMeta.yMax;
+            }
+        }
+        charts[canvasId] = new Chart(ctx, chartConfig);
+        if (zones) {
+            charts[canvasId]._docsightZones = zones.filter(function(z) { return z.color; });
+        }
+    }
+
+    /* ── BQM Graph ── */
+    function loadBqmGraph(date) {
+        var img = document.getElementById('bqm-image');
+        var noData = document.getElementById('bqm-no-data');
+        if (!img || !noData) return;
+        img.style.display = 'none';
+        noData.style.display = 'none';
+        img.onload = function() { img.style.display = 'inline-block'; };
+        img.onerror = function() {
+            img.style.display = 'none';
+            noData.textContent = T.bqm_no_data || 'No BQM graph for this date.';
+            noData.style.display = 'block';
+        };
+        img.src = '/api/bqm/image/' + date;
+    }
+
+    /* ── Init ── */
+    updateDateLabel();
+
+    // Apply hash-based view routing (must be inside IIFE to access switchView)
+    var _initHash = location.hash.replace('#', '');
+    if (validViews.indexOf(_initHash) !== -1 && _initHash !== 'live') {
+        switchView(_initHash, true);
+    }
+})();
+
+/* ── Export for LLM ── */
+function exportForLLM() {
+    var T = {{ t|tojson }};
+    var modal = document.getElementById('export-modal');
+    var textarea = document.getElementById('export-text');
+    textarea.value = T.export_no_data;
+    modal.classList.add('open');
+    fetch('/api/export')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.text) {
+                textarea.value = data.text;
+            } else if (data.error) {
+                textarea.value = data.error;
+            }
+        })
+        .catch(function() {
+            textarea.value = 'Error loading export data.';
+        });
+}
+function closeExportModal() {
+    document.getElementById('export-modal').classList.remove('open');
+}
+function openBqmSetupModal() {
+    document.getElementById('bqm-setup-modal').classList.add('open');
+}
+function closeBqmSetupModal() {
+    document.getElementById('bqm-setup-modal').classList.remove('open');
+}
+function openReportModal() {
+    document.getElementById('report-modal').classList.add('open');
+    closeSidebar();
+}
+function closeReportModal() {
+    document.getElementById('report-modal').classList.remove('open');
+    // Reset to step 1
+    document.getElementById('report-step1').style.display = '';
+    document.getElementById('report-step2').style.display = 'none';
+    document.getElementById('report-generate-btn').style.display = '';
+    document.getElementById('report-copy-btn').style.display = 'none';
+    document.getElementById('report-pdf-btn').style.display = 'none';
+}
+function generateComplaint() {
+    var days = document.getElementById('report-days').value;
+    var lang = document.getElementById('report-lang').value;
+    var name = encodeURIComponent(document.getElementById('report-name').value);
+    var number = encodeURIComponent(document.getElementById('report-number').value);
+    var address = encodeURIComponent(document.getElementById('report-address').value);
+    var btn = document.getElementById('report-generate-btn');
+    btn.disabled = true;
+    btn.textContent = '...';
+    fetch('/api/complaint?days=' + days + '&lang=' + lang + '&name=' + name + '&number=' + number + '&address=' + address)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            document.getElementById('report-complaint-text').value = data.text;
+            document.getElementById('report-step1').style.display = 'none';
+            document.getElementById('report-step2').style.display = 'block';
+            document.getElementById('report-generate-btn').style.display = 'none';
+            document.getElementById('report-copy-btn').style.display = '';
+            document.getElementById('report-pdf-btn').style.display = '';
+        })
+        .catch(function(e) { alert('Error: ' + e); })
+        .finally(function() { btn.disabled = false; btn.textContent = '\u270E Generate Letter'; });
+}
+function copyComplaint() {
+    var textarea = document.getElementById('report-complaint-text');
+    var btn = document.getElementById('report-copy-btn');
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(textarea.value).then(function() {
+            var orig = btn.innerHTML;
+            btn.innerHTML = '&#10003; Copied!';
+            setTimeout(function() { btn.innerHTML = orig; }, 2000);
+        });
+    } else {
+        document.execCommand('copy');
+    }
+}
+function downloadReport() {
+    var days = document.getElementById('report-days').value;
+    var lang = document.getElementById('report-lang').value;
+    window.location.href = '/api/report?days=' + days + '&lang=' + lang;
+}
+function copyExport() {
+    var T = {{ t|tojson }};
+    var textarea = document.getElementById('export-text');
+    var btn = document.getElementById('export-copy-btn');
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+    var ok = false;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(textarea.value).then(function() {
+            btn.textContent = T.copied;
+            setTimeout(function() { btn.textContent = T.copy_clipboard; }, 2000);
+        }).catch(function() {
+            fallbackCopy(textarea, btn, T);
+        });
+    } else {
+        fallbackCopy(textarea, btn, T);
+    }
+}
+function fallbackCopy(textarea, btn, T) {
+    try {
+        document.execCommand('copy');
+        btn.textContent = T.copied;
+        setTimeout(function() { btn.textContent = T.copy_clipboard; }, 2000);
+    } catch(e) {
+        btn.textContent = 'Select All + Ctrl+C';
+        setTimeout(function() { btn.textContent = T.copy_clipboard; }, 3000);
+    }
+}
+function toggleCard(el) {
+    el.classList.toggle('open');
+}
+function openSpeedtestSetupModal() {
+    document.getElementById('speedtest-setup-modal').classList.add('open');
+}
+function closeSpeedtestSetupModal() {
+    document.getElementById('speedtest-setup-modal').classList.remove('open');
+}
+var _speedtestRawData = [];
+var _speedtestAllData = [];
+var _speedtestVisible = 50;
+var _speedtestSortCol = 'timestamp';
+var _speedtestSortDir = 'desc';
+
+function formatSpeedtestTimestamp(ts) {
+    if (!ts) return '';
+    var d = new Date(ts);
+    if (isNaN(d.getTime())) return ts;
+    var dd = String(d.getDate()).padStart(2, '0');
+    var mm = String(d.getMonth() + 1).padStart(2, '0');
+    var yyyy = d.getFullYear();
+    var hh = String(d.getHours()).padStart(2, '0');
+    var min = String(d.getMinutes()).padStart(2, '0');
+    return dd + '.' + mm + '.' + yyyy + ' ' + hh + ':' + min;
+}
+
+function loadSpeedtestHistory() {
+    var T = {{ t|tojson }};
+    var tbody = document.getElementById('speedtest-tbody');
+    var table = document.getElementById('speedtest-table');
+    var noData = document.getElementById('speedtest-no-data');
+    var loading = document.getElementById('speedtest-loading');
+    var moreWrap = document.getElementById('speedtest-show-more');
+    if (!tbody || !table || !noData) return;
+    tbody.innerHTML = '';
+    table.style.display = 'none';
+    noData.style.display = 'none';
+    if (loading) loading.style.display = '';
+    if (moreWrap) moreWrap.style.display = 'none';
+    _speedtestRawData = [];
+    _speedtestAllData = [];
+    _speedtestVisible = 50;
+    fetch('/api/speedtest?count=2000')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (loading) loading.style.display = 'none';
+            if (!data || data.length === 0) {
+                noData.textContent = T.speedtest_no_data || 'No speedtest data.';
+                noData.style.display = 'block';
+                return;
+            }
+            _speedtestRawData = data;
+            filterSpeedtestData();
+        })
+        .catch(function() {
+            if (loading) loading.style.display = 'none';
+            noData.textContent = T.network_error || 'Error';
+            noData.style.display = 'block';
+        });
+}
+
+function filterSpeedtestData() {
+    var T = {{ t|tojson }};
+    var daysEl = document.getElementById('speedtest-days');
+    var days = daysEl ? daysEl.value : '7';
+    var table = document.getElementById('speedtest-table');
+    var noData = document.getElementById('speedtest-no-data');
+    _speedtestVisible = 50;
+    if (days === 'all') {
+        _speedtestAllData = _speedtestRawData.slice();
+    } else {
+        var cutoff = new Date(Date.now() - parseInt(days) * 86400000);
+        _speedtestAllData = _speedtestRawData.filter(function(r) {
+            return new Date(r.timestamp) >= cutoff;
+        });
+    }
+    sortSpeedtestData();
+    if (_speedtestAllData.length === 0) {
+        if (table) table.style.display = 'none';
+        if (noData) {
+            noData.textContent = T.speedtest_no_data || 'No speedtest data.';
+            noData.style.display = 'block';
+        }
+        var cc = document.getElementById('speedtest-chart-container');
+        if (cc) cc.style.display = 'none';
+    } else {
+        if (table) table.style.display = '';
+        if (noData) noData.style.display = 'none';
+        renderSpeedtestRows();
+        renderSpeedtestChart();
+    }
+}
+
+function sortSpeedtestData() {
+    var col = _speedtestSortCol;
+    var dir = _speedtestSortDir === 'asc' ? 1 : -1;
+    _speedtestAllData.sort(function(a, b) {
+        var va = a[col], vb = b[col];
+        if (col === 'timestamp') {
+            va = new Date(va || 0).getTime();
+            vb = new Date(vb || 0).getTime();
+        } else {
+            va = parseFloat(va) || 0;
+            vb = parseFloat(vb) || 0;
+        }
+        if (va < vb) return -1 * dir;
+        if (va > vb) return 1 * dir;
+        return 0;
+    });
+}
+
+function handleSpeedtestSort(col) {
+    if (_speedtestSortCol === col) {
+        _speedtestSortDir = _speedtestSortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+        _speedtestSortCol = col;
+        _speedtestSortDir = col === 'timestamp' ? 'desc' : 'asc';
+    }
+    var ths = document.querySelectorAll('#speedtest-table thead th');
+    ths.forEach(function(th) {
+        var indicator = th.querySelector('.sort-indicator');
+        if (indicator) {
+            if (th.getAttribute('data-col') === col) {
+                indicator.textContent = _speedtestSortDir === 'asc' ? '▲' : '▼';
+            } else {
+                indicator.textContent = '';
+            }
+        }
+    });
+    sortSpeedtestData();
+    _speedtestVisible = 50;
+    renderSpeedtestRows();
+    renderSpeedtestChart();
+}
+
+function computeMedian(arr) {
+    if (arr.length === 0) return 0;
+    var sorted = arr.slice().sort(function(a, b) { return a - b; });
+    var mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function renderSpeedtestRows() {
+    var T = {{ t|tojson }};
+    var tbody = document.getElementById('speedtest-tbody');
+    var moreWrap = document.getElementById('speedtest-show-more');
+    var moreBtn = document.getElementById('speedtest-more-btn');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    var downloads = [], uploads = [];
+    for (var j = 0; j < _speedtestAllData.length; j++) {
+        var d = _speedtestAllData[j];
+        if (d.download_mbps != null) downloads.push(parseFloat(d.download_mbps) || 0);
+        if (d.upload_mbps != null) uploads.push(parseFloat(d.upload_mbps) || 0);
+    }
+    var medianDl = computeMedian(downloads);
+    var medianUl = computeMedian(uploads);
+    var show = Math.min(_speedtestVisible, _speedtestAllData.length);
+    for (var i = 0; i < show; i++) {
+        var r = _speedtestAllData[i];
+        var dlVal = parseFloat(r.download_mbps) || 0;
+        var ulVal = parseFloat(r.upload_mbps) || 0;
+        var pingVal = parseFloat(r.ping_ms) || 0;
+        var jitterVal = parseFloat(r.jitter_ms) || 0;
+        var dlClass = (medianDl > 0 && dlVal < medianDl * 0.8) ? ' class="val-bad"' : '';
+        var ulClass = (medianUl > 0 && ulVal < medianUl * 0.8) ? ' class="val-bad"' : '';
+        var pingClass = pingVal > 50 ? ' class="val-warn"' : '';
+        var jitterClass = jitterVal > 20 ? ' class="val-warn"' : '';
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td>' + escapeHtml(formatSpeedtestTimestamp(r.timestamp)) + '</td>'
+            + '<td><strong' + dlClass + '>' + escapeHtml(r.download_human || (r.download_mbps + ' Mbps')) + '</strong></td>'
+            + '<td><strong' + ulClass + '>' + escapeHtml(r.upload_human || (r.upload_mbps + ' Mbps')) + '</strong></td>'
+            + '<td' + pingClass + '>' + r.ping_ms + ' ms</td>'
+            + '<td' + jitterClass + '>' + r.jitter_ms + ' ms</td>'
+            + '<td>' + (r.packet_loss_pct > 0 ? '<span class="val-warn">' + r.packet_loss_pct + '%</span>' : '0%') + '</td>';
+        tbody.appendChild(tr);
+    }
+    if (moreWrap && moreBtn) {
+        if (_speedtestAllData.length > _speedtestVisible) {
+            moreWrap.style.display = '';
+            moreBtn.textContent = (T.show_more || 'Show more') + ' (' + (_speedtestAllData.length - _speedtestVisible) + ')';
+        } else {
+            moreWrap.style.display = 'none';
+        }
+    }
+}
+
+function renderSpeedtestChart() {
+    var container = document.getElementById('speedtest-chart-container');
+    var canvas = document.getElementById('speedtest-chart');
+    if (!container || !canvas) return;
+    // Sort data chronologically for chart (oldest first)
+    var data = _speedtestAllData.slice().sort(function(a, b) {
+        return new Date(a.timestamp) - new Date(b.timestamp);
+    });
+    if (data.length < 2) { container.style.display = 'none'; return; }
+    container.style.display = '';
+    var wrap = canvas.parentElement;
+    var dpr = window.devicePixelRatio || 1;
+    var w = wrap.clientWidth;
+    var h = canvas.clientHeight || 250;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    // Padding
+    var padL = 60, padR = 60, padT = 20, padB = 30;
+    var cw = w - padL - padR;
+    var ch = h - padT - padB;
+    // Extract data arrays
+    var dls = [], uls = [], pings = [], times = [];
+    for (var i = 0; i < data.length; i++) {
+        dls.push(parseFloat(data[i].download_mbps) || 0);
+        uls.push(parseFloat(data[i].upload_mbps) || 0);
+        pings.push(parseFloat(data[i].ping_ms) || 0);
+        times.push(new Date(data[i].timestamp));
+    }
+    // Scales
+    var maxSpeed = Math.max.apply(null, dls.concat(uls)) * 1.1 || 1;
+    var maxPing = Math.max.apply(null, pings) * 1.1 || 1;
+    var medianDl = computeMedian(dls);
+    var threshold = medianDl * 0.8;
+    function xPos(idx) { return padL + (idx / (data.length - 1)) * cw; }
+    function ySpeed(v) { return padT + ch - (v / maxSpeed) * ch; }
+    function yPing(v) { return padT + ch - (v / maxPing) * ch; }
+    // Clear
+    ctx.clearRect(0, 0, w, h);
+    // Background zones (green/red tint per segment)
+    for (var i = 0; i < data.length - 1; i++) {
+        var x1 = xPos(i), x2 = xPos(i + 1);
+        var isHealthy = dls[i] >= threshold && dls[i + 1] >= threshold;
+        ctx.fillStyle = isHealthy ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)';
+        ctx.fillRect(x1, padT, x2 - x1, ch);
+    }
+    // Grid lines + left Y axis labels (speed)
+    var cs = getComputedStyle(document.documentElement);
+    var mutedColor = cs.getPropertyValue('--muted').trim() || '#888';
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+    ctx.lineWidth = 1;
+    ctx.font = '11px monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    var gridLines = 5;
+    for (var g = 0; g <= gridLines; g++) {
+        var gy = padT + (g / gridLines) * ch;
+        var speedVal = maxSpeed - (g / gridLines) * maxSpeed;
+        var pingVal = maxPing - (g / gridLines) * maxPing;
+        ctx.beginPath();
+        ctx.moveTo(padL, gy);
+        ctx.lineTo(w - padR, gy);
+        ctx.stroke();
+        ctx.fillStyle = mutedColor;
+        ctx.textAlign = 'right';
+        ctx.fillText(speedVal.toFixed(0), padL - 6, gy);
+        ctx.textAlign = 'left';
+        ctx.fillText(pingVal.toFixed(0), w - padR + 6, gy);
+    }
+    ctx.fillStyle = mutedColor;
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.save();
+    ctx.translate(12, padT + ch / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText('Mbps', 0, 0);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(w - 10, padT + ch / 2);
+    ctx.rotate(Math.PI / 2);
+    ctx.fillText('ms', 0, 0);
+    ctx.restore();
+    // X axis labels (timestamps)
+    ctx.fillStyle = mutedColor;
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    var labelCount = Math.min(6, data.length);
+    for (var li = 0; li < labelCount; li++) {
+        var idx = Math.round(li * (data.length - 1) / (labelCount - 1));
+        var t = times[idx];
+        var label = String(t.getDate()).padStart(2, '0') + '.' + String(t.getMonth() + 1).padStart(2, '0') + ' ' + String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0');
+        ctx.fillText(label, xPos(idx), padT + ch + 6);
+    }
+    // Threshold line (dashed red)
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = 'rgba(239,68,68,0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    var threshY = ySpeed(threshold);
+    ctx.moveTo(padL, threshY);
+    ctx.lineTo(w - padR, threshY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Helper: draw filled line
+    function drawLine(values, yFn, color, fillColor) {
+        // Filled area
+        ctx.beginPath();
+        ctx.moveTo(xPos(0), padT + ch);
+        for (var i = 0; i < values.length; i++) {
+            ctx.lineTo(xPos(i), yFn(values[i]));
+        }
+        ctx.lineTo(xPos(values.length - 1), padT + ch);
+        ctx.closePath();
+        ctx.fillStyle = fillColor;
+        ctx.fill();
+        // Line
+        ctx.beginPath();
+        for (var i = 0; i < values.length; i++) {
+            if (i === 0) ctx.moveTo(xPos(i), yFn(values[i]));
+            else ctx.lineTo(xPos(i), yFn(values[i]));
+        }
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+    drawLine(uls, ySpeed, '#22c55e', 'rgba(34,197,94,0.12)');
+    drawLine(dls, ySpeed, '#3b82f6', 'rgba(59,130,246,0.15)');
+    drawLine(pings, yPing, '#f59e0b', 'rgba(245,158,11,0.10)');
+    // Hover interaction
+    var tooltip = document.getElementById('speedtest-chart-tooltip');
+    // Move tooltip to body so it's never clipped
+    if (tooltip.parentElement !== document.body) document.body.appendChild(tooltip);
+    tooltip.style.position = 'fixed';
+    function onMouseMove(e) {
+        var rect = canvas.getBoundingClientRect();
+        var scaleX = w / rect.width;
+        var scaleY = h / rect.height;
+        var mx = (e.clientX - rect.left) * scaleX;
+        var my = (e.clientY - rect.top) * scaleY;
+        if (mx < padL || mx > w - padR || my < padT || my > padT + ch) {
+            tooltip.style.display = 'none'; return;
+        }
+        var ratio = (mx - padL) / cw;
+        var idx = Math.round(ratio * (data.length - 1));
+        if (idx < 0) idx = 0;
+        if (idx >= data.length) idx = data.length - 1;
+        tooltip.style.display = 'block';
+        tooltip.innerHTML = '<strong>' + formatSpeedtestTimestamp(data[idx].timestamp) + '</strong><br>'
+            + '<span style="color:#3b82f6">&#9660;</span> DL: ' + dls[idx].toFixed(2) + ' Mbps<br>'
+            + '<span style="color:#22c55e">&#9650;</span> UL: ' + uls[idx].toFixed(2) + ' Mbps<br>'
+            + '<span style="color:#f59e0b">&#9679;</span> Ping: ' + pings[idx].toFixed(1) + ' ms';
+        tooltip.style.left = (e.clientX + 14) + 'px';
+        tooltip.style.top = (e.clientY - 10) + 'px';
+    }
+    function onMouseLeave() { tooltip.style.display = 'none'; }
+    if (canvas._chartMoveHandler) canvas.removeEventListener('mousemove', canvas._chartMoveHandler);
+    if (canvas._chartLeaveHandler) canvas.removeEventListener('mouseleave', canvas._chartLeaveHandler);
+    canvas._chartMoveHandler = onMouseMove;
+    canvas._chartLeaveHandler = onMouseLeave;
+    canvas.addEventListener('mousemove', onMouseMove);
+    canvas.addEventListener('mouseleave', onMouseLeave);
+}
+window.addEventListener('resize', function() {
+    if (_speedtestAllData.length >= 2) renderSpeedtestChart();
+});
+
+function showMoreSpeedtest() {
+    _speedtestVisible += 50;
+    renderSpeedtestRows();
+}
+
+(function() {
+    var ths = document.querySelectorAll('#speedtest-table thead th[data-col]');
+    ths.forEach(function(th) {
+        th.addEventListener('click', function() {
+            handleSpeedtestSort(th.getAttribute('data-col'));
+        });
+    });
+})();
+
+function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+}
+
+
+</script>
+
+</body>
+</html>

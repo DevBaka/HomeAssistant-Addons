@@ -1,0 +1,12 @@
+.env
+.env.local
+*.db
+__pycache__/
+*.pyc
+.pytest_cache/
+.vscode/
+.idea/
+deploy.sh
+.config_key
+# config.json is needed for Home Assistant addon
+# config.json

@@ -1,0 +1,15 @@
+services:
+  docsight:
+    image: ghcr.io/itsdnns/docsight:latest
+    container_name: docsight
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    volumes:
+      - docsight_data:/data
+    # environment:
+    #   - TZ=Europe/Berlin  # set container timezone for snapshot scheduling
+    # env_file: .env  # uncomment if using environment variables
+
+volumes:
+  docsight_data:
