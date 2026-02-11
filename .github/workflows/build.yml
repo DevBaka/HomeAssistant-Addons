@@ -1,0 +1,126 @@
+name: Build Home Assistant Addons
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  schedule:
+    # Check for updates daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  check-upstream:
+    runs-on: ubuntu-latest
+    outputs:
+      should-update: ${{ steps.check.outputs.should-update }}
+      upstream-version: ${{ steps.check.outputs.upstream-version }}
+      current-version: ${{ steps.check.outputs.current-version }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Check upstream DOCSight version
+      id: check
+      run: |
+        echo "Checking upstream DOCSight repository..."
+        UPSTREAM_VERSION=$(curl -s "https://api.github.com/repos/itsDNNS/docsight/releases/latest" | grep '"tag_name"' | cut -d '"' -f 4)
+        CURRENT_VERSION=$(cat docsight/VERSION 2>/dev/null || echo "unknown")
+        
+        echo "Upstream version: $UPSTREAM_VERSION"
+        echo "Current version: $CURRENT_VERSION"
+        
+        if [ "$UPSTREAM_VERSION" != "$CURRENT_VERSION" ]; then
+          echo "should-update=true" >> $GITHUB_OUTPUT
+          echo "New version available!"
+        else
+          echo "should-update=false" >> $GITHUB_OUTPUT
+          echo "Already up to date"
+        fi
+        
+        echo "upstream-version=$UPSTREAM_VERSION" >> $GITHUB_OUTPUT
+        echo "current-version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+
+  build-addons:
+    needs: check-upstream
+    if: needs.check-upstream.outputs.should-update == 'true' || github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        addon: [docsight, icecast]
+        arch: [amd64, aarch64, armv7]
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Update DOCSight if needed
+      if: matrix.addon == 'docsight' && needs.check-upstream.outputs.should-update == 'true'
+      run: |
+        echo "Updating DOCSight to ${{ needs.check-upstream.outputs.upstream-version }}"
+        # Download latest release
+        curl -L "https://github.com/itsDNNS/docsight/archive/${{ needs.check-upstream.outputs.upstream-version }}.tar.gz" | tar xz
+        # Copy files to docsight directory (preserving HA addon files)
+        cp -r docsight-*/app/* docsight/app/
+        cp docsight-*/requirements.txt docsight/
+        cp docsight-*/VERSION docsight/
+        # Clean up
+        rm -rf docsight-*
+        
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Login to GitHub Container Registry
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.repository_owner }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Build and push
+      uses: docker/build-push-action@v5
+      with:
+        context: ./${{ matrix.addon }}
+        file: ./${{ matrix.addon }}/Dockerfile${{ matrix.arch != 'amd64' && format('.{0}', matrix.arch) || '' }}
+        platforms: linux/${{ matrix.arch }}
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: |
+          ghcr.io/${{ github.repository }}/${{ matrix.addon }}:latest
+          ghcr.io/${{ github.repository }}/${{ matrix.addon }}:${{ matrix.arch }}-latest
+          ${{ github.ref == 'refs/heads/main' && format('ghcr.io/{0}/{1}:{2}', github.repository, matrix.addon, needs.check-upstream.outputs.upstream-version || 'dev') || '' }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  create-release:
+    needs: [check-upstream, build-addons]
+    if: needs.check-upstream.outputs.should-update == 'true' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ needs.check-upstream.outputs.upstream-version }}
+        release_name: DOCSight ${{ needs.check-upstream.outputs.upstream-version }}
+        body: |
+          ## DOCSight ${{ needs.check-upstream.outputs.upstream-version }}
+          
+          ### Changes
+          - Updated to upstream DOCSight version ${{ needs.check-upstream.outputs.upstream-version }}
+          - Home Assistant addon compatibility improvements
+          
+          ### Installation
+          Add this repository to your Home Assistant Supervisor and install the DOCSight addon.
+          
+          ### What's new in DOCSight
+          See the [upstream changelog](https://github.com/itsDNNS/docsight/releases/tag/${{ needs.check-upstream.outputs.upstream-version }}) for details.
+        draft: false
+        prerelease: false

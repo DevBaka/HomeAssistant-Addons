@@ -1,0 +1,21 @@
+refresh_data:
+  name: Refresh Data
+  description: Force DOCSight to refresh its monitoring data
+  fields: {}
+
+generate_report:
+  name: Generate Report
+  description: Generate a new ISP complaint report with current data
+  fields:
+    timeframe:
+      name: Timeframe
+      description: Time period for the report
+      required: true
+      selector:
+        select:
+          options:
+            - "24h"
+            - "7d"
+            - "30d"
+            - "90d"
+          mode: dropdown

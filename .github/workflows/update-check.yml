@@ -1,0 +1,72 @@
+name: Check for Updates
+
+on:
+  schedule:
+    # Check every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  check-updates:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Check DOCSight updates
+      id: check-docsight
+      run: |
+        echo "Checking DOCSight for updates..."
+        
+        UPSTREAM_VERSION=$(curl -s "https://api.github.com/repos/itsDNNS/docsight/releases/latest" | grep '"tag_name"' | cut -d '"' -f 4)
+        CURRENT_VERSION=$(cat docsight/VERSION 2>/dev/null || echo "unknown")
+        
+        echo "Upstream: $UPSTREAM_VERSION"
+        echo "Current: $CURRENT_VERSION"
+        
+        if [ "$UPSTREAM_VERSION" != "$CURRENT_VERSION" ]; then
+          echo "Update available!"
+          echo "should-update=true" >> $GITHUB_OUTPUT
+          echo "upstream-version=$UPSTREAM_VERSION" >> $GITHUB_OUTPUT
+        else
+          echo "Up to date"
+          echo "should-update=false" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Create Pull Request if update available
+      if: steps.check-docsight.outputs.should-update == 'true'
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: "🔄 Update DOCSight to ${{ steps.check-docsight.outputs.upstream-version }}"
+        title: "🔄 DOCSight Update Available"
+        body: |
+          ## 🔄 DOCSight Update Available
+          
+          **New Version:** ${{ steps.check-docsight.outputs.upstream-version }}
+          
+          This PR updates DOCSight to the latest upstream version. The update includes:
+          
+          - Latest features and bug fixes from [itsDNNS/docsight](https://github.com/itsDNNS/docsight)
+          - Maintained Home Assistant addon compatibility
+          - Automatic version tracking
+          
+          ### 🚀 Merge to trigger automatic build and release
+          
+          Once merged, this will automatically:
+          - Build new Docker images for all architectures
+          - Create a new GitHub release
+          - Update the addon repository
+          
+          ---
+          
+          🤖 *This PR was created automatically by the update checker workflow*
+        branch: update/docsight-${{ steps.check-docsight.outputs.upstream-version }}
+        delete-branch: true
+        labels: |
+          automated
+          docsight-update
+          dependencies

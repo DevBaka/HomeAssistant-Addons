@@ -1,0 +1,28 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "DOCSight",
+        "description": "Connect to your DOCSight instance to monitor your cable internet connection.",
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to DOCSight. Please check the host and port."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "DOCSight Options",
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        }
+      }
+    }
+  }
+}
