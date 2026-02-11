@@ -6,7 +6,7 @@
   "arch": ["aarch64", "armv7", "amd64"],
   "startup": "services",
   "boot": "auto",
-  "map": ["config:rw", "share:rw"],
+  "map": ["config:rw"],
   "host_network": true,
   "ports": {
     "8765/tcp": 8765
@@ -15,14 +15,9 @@
     "8765/tcp": "DOCSight web interface"
   },
   "options": {
-    "log_level": "info",
-    "ha_integration": true,
-    "auto_discovery": true
+    "log_level": "info"
   },
   "schema": {
-    "log_level": "list(debug|info|warning|error)",
-    "ha_integration": "bool",
-    "auto_discovery": "bool"
-  },
-  "homeassistant": "2023.1.0"
+    "log_level": "list(debug|info|warning|error)"
+  }
 }

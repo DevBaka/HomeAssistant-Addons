@@ -1,23 +1,20 @@
-FROM homeassistant/amd64-base:latest
+FROM python:3.12-slim
 ARG VERSION=dev
 WORKDIR /app
 
 # Install system dependencies
-RUN apk add --no-cache \
-    python3 \
-    py3-pip \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    bash
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
 COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
 COPY app/ ./app/
 COPY run.sh /run.sh
-COPY ha_integration_install.sh /ha_integration_install.sh
-RUN chmod +x /run.sh /ha_integration_install.sh
+RUN chmod +x /run.sh
 
 # Set up version
 RUN echo "${VERSION}" > /app/VERSION
