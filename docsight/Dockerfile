@@ -14,7 +14,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application files
 COPY app/ ./app/
 COPY run.sh /run.sh
-RUN chmod +x /run.sh
+COPY update_docsight.sh /update_docsight.sh
+COPY ha_panel_install.sh /ha_panel_install.sh
+COPY manual_update.sh /manual_update.sh
+COPY check_updates.sh /check_updates.sh
+RUN chmod +x /run.sh /update_docsight.sh /ha_panel_install.sh /manual_update.sh /check_updates.sh
 
 # Set up version
 RUN echo "${VERSION}" > /app/VERSION

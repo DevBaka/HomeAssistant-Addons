@@ -3,11 +3,11 @@
   "version": "1.0.0",
   "slug": "docsight",
   "description": "Monitor your cable internet connection 24/7 and collect evidence for ISP complaints",
-  "arch": ["aarch64", "armv7", "amd64"],
-  "startup": "services",
-  "boot": "auto",
+  "arch": ["amd64"],
+  "startup": "application",
+  "boot": "manual",
   "map": ["config:rw"],
-  "host_network": true,
+  "host_network": false,
   "ports": {
     "8765/tcp": 8765
   },
@@ -15,9 +15,15 @@
     "8765/tcp": "DOCSight web interface"
   },
   "options": {
-    "log_level": "info"
+    "log_level": "info",
+    "auto_update": false,
+    "check_updates": true,
+    "ha_panel": true
   },
   "schema": {
-    "log_level": "list(debug|info|warning|error)"
+    "log_level": "list(debug|info|warning|error)",
+    "auto_update": "bool",
+    "check_updates": "bool",
+    "ha_panel": "bool"
   }
 }
