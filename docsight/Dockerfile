@@ -1,35 +1,42 @@
+# --- builder stage: compile native dependencies ---
+FROM python:3.12-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libffi-dev \
+    libjpeg62-turbo-dev \
+    zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+COPY tools/icmp_probe_helper.c /build/icmp_probe_helper.c
+RUN mkdir -p /build/out && \
+    gcc -O2 -Wall -o /build/out/docsight-icmp-helper /build/icmp_probe_helper.c
+
+# --- runtime stage: slim final image ---
 FROM python:3.12-slim
 ARG VERSION=dev
 WORKDIR /app
+RUN echo "${VERSION}" > /app/VERSION
 
-# Install system dependencies
+COPY --from=builder /install /usr/local
+COPY --from=builder /build/out/docsight-icmp-helper /usr/local/bin/docsight-icmp-helper
+
+# Keep elevated privileges scoped to the dedicated ICMP helper.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
     gosu \
+    libjpeg62-turbo \
+    && chown root:root /usr/local/bin/docsight-icmp-helper \
+    && chmod 4755 /usr/local/bin/docsight-icmp-helper \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Create appuser
-RUN adduser --disabled-password --gecos "" --uid 1000 appuser
-
-# Copy application files
+RUN adduser --disabled-password --gecos "" --uid 1000 appuser && \
+    mkdir -p /data && chown appuser:appuser /data
 COPY app/ ./app/
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
-
-# Set up version
-RUN echo "${VERSION}" > /app/VERSION
-
-# Health check
 HEALTHCHECK --interval=60s --timeout=5s --retries=3 \
-    CMD curl -f http://localhost:8765/health || exit 1
-
-# Expose port
-EXPOSE 8765
-
-# Start the application
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8765/health')" || exit 1
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python", "-m", "app.main"]
