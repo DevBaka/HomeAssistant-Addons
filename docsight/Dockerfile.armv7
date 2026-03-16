@@ -5,7 +5,11 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
+
+# Create appuser
+RUN adduser --disabled-password --gecos "" --uid 1000 appuser
 
 # Install Python dependencies
 COPY requirements.txt .
@@ -15,6 +19,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ ./app/
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+# Create data directory
+RUN mkdir -p /data && chown appuser:appuser /data
 
 # Set up version
 RUN echo "${VERSION}" > /app/VERSION
