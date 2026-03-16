@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import stat
+from urllib.parse import urlparse
 
 from cryptography.fernet import Fernet
 from werkzeug.security import generate_password_hash
@@ -13,33 +14,44 @@ log = logging.getLogger("docsis.config")
 POLL_MIN = 60
 POLL_MAX = 14400
 
-SECRET_KEYS = {"modem_password", "mqtt_password", "speedtest_tracker_token"}
+SECRET_KEYS = {"modem_password", "mqtt_password", "speedtest_tracker_token", "notify_webhook_token"}
+DEMO_HIDE_KEYS = {"bqm_url", "speedtest_tracker_url",
+                  "notify_webhook_url", "mqtt_host", "mqtt_user", "mqtt_topic_prefix",
+                  "mqtt_discovery_prefix"}
 HASH_KEYS = {"admin_password"}
 PASSWORD_MASK = "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
 
 DEFAULTS = {
+    "modem_type": "fritzbox",
     "modem_url": "http://192.168.178.1",
     "modem_user": "",
     "modem_password": "",
-    "mqtt_host": "",
-    "mqtt_port": 1883,
-    "mqtt_user": "",
-    "mqtt_password": "",
-    "mqtt_topic_prefix": "docsight",
     "poll_interval": 900,
     "web_port": 8765,
+    "public_url": "",
     "history_days": 0,
     "snapshot_time": "06:00",
     "theme": "dark",
     "language": "en",
     "isp_name": "",
     "admin_password": "",
-    "bqm_url": "",
-    "speedtest_tracker_url": "",
-    "speedtest_tracker_token": "",
+    "demo_mode": False,
+    "gaming_quality_enabled": True,
+    "segment_utilization_enabled": True,
+    "notify_webhook_url": "",
+    "notify_webhook_token": "",
+    "notify_min_severity": "warning",
+    "notify_cooldown": 3600,
+    "notify_cooldowns": "{}",
+    "timezone": "",
+    "disabled_modules": "docsight.smokeping",  # comma-separated list of module IDs to disable
+    "active_theme": "",  # Module ID of active theme (empty = first available)
+    "theme_registry_url": "https://raw.githubusercontent.com/itsDNNS/docsight-themes/main/registry.json",
+    "health_hysteresis": 0,
 }
 
 ENV_MAP = {
+    "modem_type": "MODEM_TYPE",
     "modem_url": "MODEM_URL",
     "modem_user": "MODEM_USER",
     "modem_password": "MODEM_PASSWORD",
@@ -47,15 +59,35 @@ ENV_MAP = {
     "mqtt_port": "MQTT_PORT",
     "mqtt_user": "MQTT_USER",
     "mqtt_password": "MQTT_PASSWORD",
+    "mqtt_tls_insecure": "MQTT_TLS_INSECURE",
     "mqtt_topic_prefix": "MQTT_TOPIC_PREFIX",
+    "mqtt_discovery_prefix": "MQTT_DISCOVERY_PREFIX",
     "poll_interval": "POLL_INTERVAL",
     "web_port": "WEB_PORT",
+    "public_url": "PUBLIC_URL",
     "history_days": "HISTORY_DAYS",
     "data_dir": "DATA_DIR",
     "admin_password": "ADMIN_PASSWORD",
     "bqm_url": "BQM_URL",
     "speedtest_tracker_url": "SPEEDTEST_TRACKER_URL",
     "speedtest_tracker_token": "SPEEDTEST_TRACKER_TOKEN",
+    "booked_download": "BOOKED_DOWNLOAD",
+    "booked_upload": "BOOKED_UPLOAD",
+    "demo_mode": "DEMO_MODE",
+    "gaming_quality_enabled": "GAMING_QUALITY_ENABLED",
+    "segment_utilization_enabled": "SEGMENT_UTILIZATION_ENABLED",
+    "bnetz_enabled": "BNETZ_ENABLED",
+    "notify_webhook_url": "NOTIFY_WEBHOOK_URL",
+    "notify_webhook_token": "NOTIFY_WEBHOOK_TOKEN",
+    "notify_min_severity": "NOTIFY_MIN_SEVERITY",
+    "notify_cooldown": "NOTIFY_COOLDOWN",
+    "notify_cooldowns": "NOTIFY_COOLDOWNS",
+    "bnetz_watch_enabled": "BNETZ_WATCH_ENABLED",
+    "bnetz_watch_dir": "BNETZ_WATCH_DIR",
+    "weather_enabled": "WEATHER_ENABLED",
+    "weather_latitude": "WEATHER_LATITUDE",
+    "weather_longitude": "WEATHER_LONGITUDE",
+    "health_hysteresis": "HEALTH_HYSTERESIS",
 }
 
 # Deprecated env vars (FRITZ_* -> MODEM_*) - checked as fallback
@@ -72,7 +104,14 @@ _LEGACY_KEY_MAP = {
     "fritz_password": "modem_password",
 }
 
-INT_KEYS = {"mqtt_port", "poll_interval", "web_port", "history_days"}
+INT_KEYS = {"poll_interval", "web_port", "history_days", "notify_cooldown", "health_hysteresis"}
+BOOL_KEYS = {"demo_mode", "gaming_quality_enabled", "segment_utilization_enabled"}
+
+URL_KEYS = {"modem_url", "bqm_url", "speedtest_tracker_url", "notify_webhook_url"}
+_ALLOWED_URL_SCHEMES = {"http", "https"}
+
+# Keys where an empty string should fall back to the DEFAULTS value
+_NON_EMPTY_KEYS = set()
 
 
 class ConfigManager:
@@ -152,6 +191,12 @@ class ConfigManager:
             except Exception as e:
                 log.warning("Failed to save migrated config: %s", e)
 
+    def _get_default_disabled_modules(self):
+        """Keep existing Smokeping setups active while new installs default it off."""
+        if self._file_config.get("smokeping_url") and self._file_config.get("smokeping_targets"):
+            return ""
+        return DEFAULTS["disabled_modules"]
+
     def get(self, key, default=None):
         """Get config value: env var > legacy env var > config.json > default.
         Secret keys from config.json are decrypted transparently."""
@@ -162,6 +207,8 @@ class ConfigManager:
             if env_val is not None and env_val != "":
                 if key in INT_KEYS:
                     return int(env_val)
+                if key in BOOL_KEYS:
+                    return env_val.lower() in ("true", "1", "yes", "on")
                 return env_val
         # Check deprecated FRITZ_* env vars as fallback
         legacy_env = _LEGACY_ENV_MAP.get(key)
@@ -172,7 +219,12 @@ class ConfigManager:
 
         if key in self._file_config:
             val = self._file_config[key]
+            # Keys that must not be empty: fall through to defaults
+            if key in _NON_EMPTY_KEYS and not val:
+                return DEFAULTS[key]
             if key in INT_KEYS and not isinstance(val, int):
+                if val == "" or val is None:
+                    return default if default is not None else 0
                 return int(val)
             if key in HASH_KEYS:
                 # Return werkzeug hash as-is; legacy Fernet-encrypted values get decrypted
@@ -183,18 +235,44 @@ class ConfigManager:
                 return self._decrypt(val)
             return val
 
+        if key == "disabled_modules":
+            return self._get_default_disabled_modules()
+
         if default is not None:
             return default
         return DEFAULTS.get(key)
+
+    @staticmethod
+    def _validate_url(key, value):
+        """Validate that URL keys use http or https scheme only."""
+        if not value:
+            return
+        parsed = urlparse(value)
+        if parsed.scheme not in _ALLOWED_URL_SCHEMES:
+            raise ValueError(
+                f"Invalid URL scheme '{parsed.scheme}' for {key}. "
+                f"Only http and https are allowed."
+            )
 
     def save(self, data):
         """Save config values to config.json. Passwords are encrypted."""
         os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
 
+        # Validate URL keys before any mutation
+        for key in URL_KEYS:
+            if key in data and data[key]:
+                self._validate_url(key, data[key])
+
         # Don't overwrite passwords with the mask placeholder
         for key in SECRET_KEYS | HASH_KEYS:
             if key in data and data[key] == PASSWORD_MASK:
                 del data[key]
+
+        # In demo mode, don't overwrite hidden private values with empty strings
+        if self.is_demo_mode():
+            for key in DEMO_HIDE_KEYS:
+                if key in data and not data[key]:
+                    del data[key]
 
         # Hash password keys (admin_password) before storing
         for key in HASH_KEYS:
@@ -207,6 +285,11 @@ class ConfigManager:
             if key in data and data[key]:
                 data[key] = self._encrypt(data[key])
 
+        # Replace empty strings with defaults for keys that require a value
+        for key in _NON_EMPTY_KEYS:
+            if key in data and not data[key]:
+                data[key] = DEFAULTS[key]
+
         # Merge with existing config
         self._file_config.update(data)
 
@@ -218,6 +301,13 @@ class ConfigManager:
                 except (ValueError, TypeError):
                     pass
 
+        # Cast bool keys
+        for key in BOOL_KEYS:
+            if key in self._file_config:
+                val = self._file_config[key]
+                if isinstance(val, str):
+                    self._file_config[key] = val.lower() in ("true", "1", "yes", "on")
+
         with open(self.config_path, "w") as f:
             json.dump(self._file_config, f, indent=2)
         try:
@@ -227,20 +317,78 @@ class ConfigManager:
         log.info("Config saved to %s", self.config_path)
 
     def is_configured(self):
-        """True if modem_password is set (from env or config.json)."""
-        return bool(self.get("modem_password"))
+        """True if modem type was explicitly saved (setup completed) or demo mode."""
+        if self.is_demo_mode():
+            return True
+        return "modem_type" in self._file_config
+
+    def is_demo_mode(self):
+        """True if DEMO_MODE is enabled."""
+        return bool(self.get("demo_mode"))
 
     def is_mqtt_configured(self):
         """True if mqtt_host is set (MQTT is optional)."""
         return bool(self.get("mqtt_host"))
 
+    def is_smokeping_configured(self):
+        """True if smokeping_url and smokeping_targets are set, or demo mode is active."""
+        return bool(self.get("smokeping_url") and self.get("smokeping_targets")) or self.is_demo_mode()
+
     def is_bqm_configured(self):
-        """True if bqm_url is set (BQM is optional)."""
-        return bool(self.get("bqm_url"))
+        """True if bqm_url is set or demo mode is active (BQM is optional)."""
+        return bool(self.get("bqm_url")) or self.is_demo_mode()
+
+    def is_gaming_quality_enabled(self):
+        """True if gaming quality index is enabled, or demo mode is active."""
+        val = self.get("gaming_quality_enabled")
+        if isinstance(val, str):
+            val = val.lower() in ("true", "1", "yes")
+        return bool(val) or self.is_demo_mode()
+
+    def is_segment_utilization_enabled(self):
+        """True if FRITZ!Box segment utilization is enabled."""
+        val = self.get("segment_utilization_enabled")
+        if isinstance(val, str):
+            val = val.lower() in ("true", "1", "yes")
+        return bool(val)
+
+    def is_bnetz_enabled(self):
+        """True if BNetzA broadband measurement feature is enabled."""
+        val = self.get("bnetz_enabled")
+        if isinstance(val, str):
+            val = val.lower() in ("true", "1", "yes")
+        return bool(val)
+
+    def is_bnetz_watch_configured(self):
+        """True if BNetzA file watcher is enabled and BNetzA feature is enabled."""
+        val = self.get("bnetz_watch_enabled")
+        if isinstance(val, str):
+            val = val.lower() in ("true", "1", "yes")
+        return bool(val) and self.is_bnetz_enabled()
+
+    def is_notify_configured(self):
+        """True if a notification webhook URL is set."""
+        return bool(self.get("notify_webhook_url"))
 
     def is_speedtest_configured(self):
-        """True if speedtest_tracker_url and token are set (optional)."""
-        return bool(self.get("speedtest_tracker_url") and self.get("speedtest_tracker_token"))
+        """True if speedtest_tracker_url and token are set, or demo mode is active."""
+        return bool(self.get("speedtest_tracker_url") and self.get("speedtest_tracker_token")) or self.is_demo_mode()
+
+    def is_weather_configured(self):
+        """True if weather is enabled and latitude/longitude are set, or demo mode is active."""
+        val = self.get("weather_enabled")
+        if isinstance(val, str):
+            val = val.lower() in ("true", "1", "yes")
+        lat = self.get("weather_latitude")
+        lon = self.get("weather_longitude")
+        return (bool(val) and bool(lat) and bool(lon)) or self.is_demo_mode()
+
+    def is_backup_configured(self):
+        """True if automatic backups are enabled and a backup path is set."""
+        val = self.get("backup_enabled")
+        if isinstance(val, str):
+            val = val.lower() in ("true", "1", "yes")
+        return bool(val) and bool(self.get("backup_path"))
 
     def get_theme(self):
         """Return 'dark' or 'light'."""
@@ -249,12 +397,16 @@ class ConfigManager:
 
     def get_all(self, mask_secrets=False):
         """Return all config values as dict.
-        If mask_secrets=True, password fields show a mask instead of real values."""
+        If mask_secrets=True, password fields show a mask instead of real values.
+        In demo mode, private integration URLs/hosts are hidden."""
+        demo = self.is_demo_mode()
         result = {}
         for key in DEFAULTS:
             val = self.get(key)
             if mask_secrets and key in (SECRET_KEYS | HASH_KEYS) and val:
                 result[key] = PASSWORD_MASK
+            elif mask_secrets and demo and key in DEMO_HIDE_KEYS:
+                result[key] = ""
             else:
                 result[key] = val
         result["data_dir"] = os.environ.get("DATA_DIR", self.data_dir)

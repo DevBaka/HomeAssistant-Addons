@@ -5,7 +5,11 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.report import generate_report, _compute_worst_values, _find_worst_channels
+from app.modules.reports.report import (
+    generate_report, generate_complaint_text,
+    _compute_worst_values, _find_worst_channels,
+    _format_threshold_table, _default_warn_thresholds,
+)
 
 
 MOCK_ANALYSIS = {
@@ -33,9 +37,9 @@ MOCK_SNAPSHOTS = [
     {"timestamp": "2026-02-04T10:00:00", "summary": MOCK_ANALYSIS["summary"],
      "ds_channels": MOCK_ANALYSIS["ds_channels"], "us_channels": MOCK_ANALYSIS["us_channels"]},
     {"timestamp": "2026-02-05T10:00:00", "summary": {
-        **MOCK_ANALYSIS["summary"], "health": "poor", "ds_snr_min": 22.0,
+        **MOCK_ANALYSIS["summary"], "health": "critical", "ds_snr_min": 22.0,
         "us_power_max": 55.0, "ds_uncorrectable_errors": 50000,
-        "health_issues": ["snr_critical", "us_power_critical"]},
+        "health_issues": ["snr_critical", "us_power_critical_high"]},
      "ds_channels": MOCK_ANALYSIS["ds_channels"], "us_channels": MOCK_ANALYSIS["us_channels"]},
 ]
 
@@ -62,7 +66,7 @@ def test_generate_report_with_config():
 
 def test_compute_worst_values():
     worst = _compute_worst_values(MOCK_SNAPSHOTS)
-    assert worst["health_poor_count"] == 1
+    assert worst["health_critical_count"] == 1
     assert worst["total_snapshots"] == 2
     assert worst["us_power_max"] == 55.0
     assert worst["ds_snr_min"] == 22.0
@@ -74,3 +78,128 @@ def test_find_worst_channels():
     # Channel 2 should appear as problematic (health: warning in both snapshots)
     assert len(ds_worst) > 0
     assert ds_worst[0][0] == 2  # channel_id 2
+
+
+def test_format_threshold_table_uses_real_values():
+    rows = _format_threshold_table()
+    assert len(rows) > 0
+    categories = {r["category"] for r in rows}
+    assert "DS Power" in categories
+    assert "US Power" in categories
+    assert "SNR/MER" in categories
+    # Check that values come from thresholds.json, not hardcoded
+    ds_256 = [r for r in rows if r["category"] == "DS Power" and r["variant"] == "256QAM"]
+    assert len(ds_256) == 1
+    assert "-3.9" in ds_256[0]["good"]
+    assert "13.0" in ds_256[0]["good"]
+    # Upstream modulation thresholds
+    us_mod = [r for r in rows if r["category"] == "US Modulation"]
+    assert len(us_mod) == 1
+    assert "16" in us_mod[0]["tolerated"]
+    assert "4" in us_mod[0]["critical"]
+
+
+def test_default_warn_thresholds():
+    warn = _default_warn_thresholds()
+    assert "ds_power" in warn
+    assert "us_power" in warn
+    assert "snr" in warn
+    # 256QAM tolerated: -5.9 to 18.0
+    assert "-5.9" in warn["ds_power"]
+    assert "18.0" in warn["ds_power"]
+    # EuroDOCSIS 3.0 tolerated: 37.1 to 51.0
+    assert "37.1" in warn["us_power"]
+    assert "51.0" in warn["us_power"]
+    # SNR 256QAM warning_min: 31.0
+    assert "31.0" in warn["snr"]
+
+
+def test_generate_report_with_none_channel_values():
+    """Regression test for #112: Arris CM3500B sends None for some channel fields."""
+    analysis_with_nones = {
+        "summary": MOCK_ANALYSIS["summary"],
+        "ds_channels": [
+            {"channel_id": 1, "frequency": None, "power": None, "snr": None,
+             "modulation": None, "correctable_errors": None, "uncorrectable_errors": None, "health": "good"},
+        ],
+        "us_channels": [
+            {"channel_id": 1, "frequency": None, "power": None,
+             "modulation": None, "multiplex": None, "health": "good"},
+        ],
+    }
+    snapshots_with_nones = [
+        {"timestamp": "2026-02-27T12:00:00", "summary": MOCK_ANALYSIS["summary"],
+         "ds_channels": analysis_with_nones["ds_channels"],
+         "us_channels": analysis_with_nones["us_channels"]},
+    ]
+    pdf = generate_report(snapshots_with_nones, analysis_with_nones)
+    assert isinstance(pdf, bytes)
+    assert pdf[:5] == b"%PDF-"
+
+
+def test_complaint_text_uses_real_thresholds():
+    text = generate_complaint_text(MOCK_SNAPSHOTS)
+    # Should contain real threshold values from thresholds.json
+    assert "-5.9 to 18.0 dBmV" in text
+    assert "37.1 to 51.0 dBmV" in text
+    assert ">= 31.0 dB" in text
+
+
+def test_complaint_text_includes_comparison_evidence():
+    comparison_data = {
+        "period_a": {
+            "from": "2026-03-01T00:00:00Z",
+            "to": "2026-03-01T23:59:00Z",
+            "snapshots": 2,
+            "health_distribution": {"good": 2},
+        },
+        "period_b": {
+            "from": "2026-03-08T00:00:00Z",
+            "to": "2026-03-08T23:59:00Z",
+            "snapshots": 1,
+            "health_distribution": {"critical": 1},
+        },
+        "delta": {
+            "ds_power": 1.1,
+            "ds_snr": -2.7,
+            "us_power": 0.3,
+            "uncorr_errors": 127,
+            "verdict": "degraded",
+        },
+    }
+
+    text = generate_complaint_text(MOCK_SNAPSHOTS, comparison_data=comparison_data)
+
+    assert "Before/After comparison evidence:" in text
+    assert "Overall verdict: Degraded." in text
+    assert "Average DS SNR delta: -2.70 dB." in text
+    assert "Uncorrectable error delta: 127." in text
+
+
+def test_generate_report_accepts_comparison_evidence():
+    comparison_data = {
+        "period_a": {
+            "from": "2026-03-01T00:00:00Z",
+            "to": "2026-03-01T23:59:00Z",
+            "snapshots": 2,
+            "health_distribution": {"good": 2},
+        },
+        "period_b": {
+            "from": "2026-03-08T00:00:00Z",
+            "to": "2026-03-08T23:59:00Z",
+            "snapshots": 1,
+            "health_distribution": {"critical": 1},
+        },
+        "delta": {
+            "ds_power": 1.1,
+            "ds_snr": -2.7,
+            "us_power": 0.3,
+            "uncorr_errors": 127,
+            "verdict": "degraded",
+        },
+    }
+
+    pdf = generate_report(MOCK_SNAPSHOTS, MOCK_ANALYSIS, comparison_data=comparison_data)
+
+    assert pdf[:5] == b"%PDF-"
+    assert len(pdf) > 1000

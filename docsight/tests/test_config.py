@@ -3,7 +3,7 @@
 import json
 import os
 import pytest
-from app.config import ConfigManager, DEFAULTS, SECRET_KEYS, HASH_KEYS, PASSWORD_MASK
+from app.config import ConfigManager, DEFAULTS, SECRET_KEYS, HASH_KEYS, PASSWORD_MASK, URL_KEYS
 
 
 @pytest.fixture
@@ -33,6 +33,9 @@ class TestConfigDefaults:
     def test_mqtt_not_configured_initially(self, config):
         assert config.is_mqtt_configured() is False
 
+    def test_smokeping_module_disabled_by_default(self, config):
+        assert config.get("disabled_modules") == "docsight.smokeping"
+
 
 class TestConfigSaveLoad:
     def test_save_and_load(self, tmp_data_dir):
@@ -54,6 +57,18 @@ class TestConfigSaveLoad:
         config2 = ConfigManager(tmp_data_dir)
         assert config2.get("poll_interval") == 180
         assert isinstance(config2.get("poll_interval"), int)
+
+    @pytest.mark.parametrize("value,expected", [
+        ("true", True), ("True", True), ("TRUE", True),
+        ("1", True), ("yes", True), ("on", True), ("On", True),
+        ("false", False), ("False", False), ("0", False), ("no", False),
+        ("off", False), ("", False),
+    ])
+    def test_bool_keys_cast(self, tmp_data_dir, value, expected):
+        config = ConfigManager(tmp_data_dir)
+        config.save({"demo_mode": value})
+        config2 = ConfigManager(tmp_data_dir)
+        assert config2.get("demo_mode") is expected
 
 
 class TestConfigSecrets:
@@ -83,10 +98,9 @@ class TestConfigSecrets:
         assert config2.get("modem_user") == "updated"
 
     def test_get_all_masks_secrets(self, config):
-        config.save({"modem_password": "secret", "mqtt_password": "mqttpass"})
+        config.save({"modem_password": "secret"})
         all_config = config.get_all(mask_secrets=True)
         assert all_config["modem_password"] == PASSWORD_MASK
-        assert all_config["mqtt_password"] == PASSWORD_MASK
 
     def test_get_all_shows_secrets(self, config):
         config.save({"modem_password": "secret"})
@@ -170,9 +184,17 @@ class TestConfigMigration:
 
 
 class TestConfigState:
-    def test_is_configured_with_password(self, config):
-        config.save({"modem_password": "pass123"})
+    def test_is_configured_with_modem_type(self, config):
+        config.save({"modem_type": "fritzbox"})
         assert config.is_configured() is True
+
+    def test_is_configured_without_password(self, config):
+        config.save({"modem_type": "generic"})
+        assert config.is_configured() is True
+
+    def test_not_configured_without_modem_type(self, config):
+        config.save({"modem_password": "pass123"})
+        assert config.is_configured() is False
 
     def test_is_mqtt_configured(self, config):
         config.save({"mqtt_host": "broker.local"})
@@ -184,3 +206,56 @@ class TestConfigState:
         assert config.get_theme() == "light"
         config.save({"theme": "invalid"})
         assert config.get_theme() == "dark"
+
+    def test_segment_utilization_enabled_defaults_true(self, config):
+        assert config.is_segment_utilization_enabled() is True
+
+    def test_segment_utilization_enabled_can_be_disabled(self, config):
+        config.save({"segment_utilization_enabled": False})
+        assert config.is_segment_utilization_enabled() is False
+
+    def test_existing_smokeping_config_keeps_module_enabled(self, config):
+        config.save({
+            "smokeping_url": "https://smokeping.example.com/smokeping",
+            "smokeping_targets": "InternetSites.Google",
+        })
+        assert config.get("disabled_modules") == ""
+
+    def test_explicit_disabled_modules_override_is_preserved(self, config):
+        config.save({"disabled_modules": "docsight.smokeping,test.integration"})
+        assert config.get("disabled_modules") == "docsight.smokeping,test.integration"
+
+
+class TestConfigUrlValidation:
+    @pytest.mark.parametrize("url", [
+        "http://192.168.1.1",
+        "https://example.com",
+        "http://modem.local:8080/status",
+        "https://speedtest.example.com/api",
+    ])
+    def test_valid_urls_accepted(self, config, url):
+        for key in URL_KEYS:
+            config.save({key: url})
+            assert config.get(key) == url
+
+    @pytest.mark.parametrize("url", [
+        "file:///etc/passwd",
+        "gopher://evil.com",
+        "ftp://files.local/data",
+        "javascript:alert(1)",
+        "data:text/html,<h1>hi</h1>",
+    ])
+    def test_forbidden_schemes_rejected(self, config, url):
+        for key in URL_KEYS:
+            with pytest.raises(ValueError, match="Only http and https are allowed"):
+                config.save({key: url})
+
+    def test_empty_url_allowed(self, config):
+        for key in URL_KEYS:
+            config.save({key: ""})
+
+    def test_valid_data_alongside_bad_url_not_saved(self, config):
+        config.save({"modem_user": "before"})
+        with pytest.raises(ValueError):
+            config.save({"modem_user": "after", "modem_url": "file:///etc/passwd"})
+        assert config.get("modem_user") == "before"

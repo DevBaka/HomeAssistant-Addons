@@ -2,6 +2,33 @@
 
 Thanks for your interest in contributing!
 
+## Before You Start
+
+**Please open an issue first** before working on any new feature or significant change. This lets us discuss the approach and make sure it fits the project architecture. PRs without a prior issue may be closed.
+
+This is especially important for:
+- New features or modules
+- Architectural changes
+- Changes touching multiple files
+
+Small bugfixes and typo corrections are fine without an issue.
+
+## Architecture
+
+DOCSight v2.0 uses a **modular collector-based architecture**. All data collection follows this pattern:
+
+```
+Collector Registry → Base Collector (Fail-Safe) → Analyzer/Storage → Web UI
+```
+
+**When contributing:**
+- New data sources must implement the `Collector` base class
+- New modem types must implement the `ModemDriver` base class (`app/drivers/base.py`)
+- Collectors run in **parallel threads** via `ThreadPoolExecutor`. Protect shared state with locks.
+- Use the collector pattern for automatic fail-safe and health monitoring
+
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) for detailed technical documentation and data flow diagrams.
+
 ## Development Setup
 
 ```bash
@@ -19,7 +46,7 @@ For a containerized dev environment:
 docker compose -f docker-compose.dev.yml up -d --build
 ```
 
-This runs on port **8766** (`http://localhost:8766`). Production uses `docker-compose.yml` on port 8765.
+This runs on port **8767** (`http://localhost:8767`) in demo mode. Production uses `docker-compose.yml` on port 8765.
 
 ## Running Tests
 
@@ -27,7 +54,7 @@ This runs on port **8766** (`http://localhost:8766`). Production uses `docker-co
 python -m pytest tests/ -v
 ```
 
-124+ tests cover analyzers, API endpoints, config, MQTT, i18n, and PDF generation.
+1100+ tests cover analyzers, collectors, drivers, event detection, API endpoints, config, MQTT, i18n, and PDF generation. All tests must pass before submitting a PR.
 
 ## Running Locally
 
@@ -41,22 +68,28 @@ Open `http://localhost:8765` to access the setup wizard.
 
 ```
 app/
-  main.py            - Entrypoint, polling loop, thread management
-  web.py             - Flask routes and API endpoints
+  main.py            - Entrypoint, ThreadPoolExecutor polling loop
+  web.py             - Flask routes and API endpoints (thread-safe state)
   analyzer.py        - DOCSIS channel health analysis
-  fritzbox.py        - FritzBox data.lua API client
+  event_detector.py  - Signal anomaly detection (thread-safe)
+  thresholds.json    - Configurable signal thresholds (VFKD guidelines)
   config.py          - Configuration management (env + config.json)
-  storage.py         - SQLite snapshot storage
-  mqtt_publisher.py  - MQTT Auto-Discovery for Home Assistant
-  report.py          - Incident Report PDF generator (fpdf2)
-  thinkbroadband.py  - BQM integration
+  storage/           - SQLite storage (base + mixins), WAL mode, thread-safe
+  collectors/        - Collector implementations (modem, demo, speedtest, bqm)
+    base.py          - Abstract Collector with fail-safe and locking
+    __init__.py      - Registry and discover_collectors()
+  drivers/           - Modem driver implementations (11 drivers)
+    base.py          - Abstract ModemDriver interface
+    registry.py      - Driver registry (auto-detection + manual selection)
+  modules/           - Built-in modules (backup, bnetz, bqm, journal, mqtt, ...)
+  blueprints/        - Flask blueprints (config, polling, data, analysis, ...)
   i18n/              - Translation files (EN/DE/FR/ES JSON)
   fonts/             - Bundled DejaVu fonts for PDF generation
   static/            - Static assets (icons, etc.)
   templates/         - Jinja2 HTML templates
-tests/               - pytest test suite (124+ tests)
+tests/               - pytest test suite (1100+ tests)
 docker-compose.yml     - Production Docker setup
-docker-compose.dev.yml - Development Docker setup (port 8766)
+docker-compose.dev.yml - Development Docker setup
 ```
 
 ## Internationalization (i18n)
@@ -70,19 +103,22 @@ Translations live in `app/i18n/` as JSON files:
 
 Each file has a `_meta` field with `language_name` and `flag`. When adding or changing UI strings, update **all 4 files**.
 
-## Guidelines
+## Pull Request Guidelines
 
-- Keep changes focused and minimal
+- **One PR per feature/fix.** Don't bundle unrelated changes.
+- **Keep changes focused and minimal.** Smaller PRs are easier to review and more likely to be merged.
+- **Follow the pipeline architecture.** New functionality must integrate into the existing data flow, not bypass it.
 - Add tests for new functionality
 - Maintain all 4 language translations (EN/DE/FR/ES) in `app/i18n/*.json`
-- CHANGELOG entries must be in English
 - Run the full test suite before submitting a PR
+- AI-generated bulk PRs without prior discussion will not be merged
+
+## Building Modules
+
+DOCSight supports community modules that extend functionality without modifying core code. Modules can add API endpoints, data collectors, settings panels, dashboard tabs, and more.
+
+See the **[DOCSight Community Modules](https://github.com/itsDNNS/docsight-modules)** repository for the development guide, starter template, and submission process.
 
 ## Adding Modem Support
 
-DOCSight currently supports AVM FRITZ!Box Cable routers. To add support for another modem:
-
-1. Create a new module in `app/` (e.g., `app/arris.py`)
-2. Implement `login()`, `get_docsis_data()`, and `get_device_info()` matching the FritzBox API
-3. Return data in the same format as `fritzbox.get_docsis_data()` so the analyzer works unchanged
-4. Update `main.py` to select the modem driver based on configuration
+See the **[Adding Modem Support](https://github.com/itsDNNS/docsight/wiki/Adding-Modem-Support)** wiki page for the full guide, including raw data format, analyzer output reference, and wanted drivers.

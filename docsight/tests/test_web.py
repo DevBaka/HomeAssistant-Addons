@@ -1,16 +1,21 @@
 """Tests for Flask web routes and API endpoints."""
 
+import io
 import json
 import pytest
-from app.web import app, update_state, init_config, init_storage
+from unittest.mock import patch
+from app.web import app, update_state, init_config, init_storage, reset_modem_state, get_state
 from app.config import ConfigManager
+from app.storage import SnapshotStorage
+from app.modules.bnetz.storage import BnetzStorage
+from app.modules.speedtest.storage import SpeedtestStorage
 
 
 @pytest.fixture
 def config_mgr(tmp_path):
     data_dir = str(tmp_path / "data")
     mgr = ConfigManager(data_dir)
-    mgr.save({"modem_password": "test", "isp_name": "Vodafone"})
+    mgr.save({"modem_password": "test", "modem_type": "fritzbox", "isp_name": "Vodafone"})
     return mgr
 
 
@@ -41,6 +46,7 @@ def sample_analysis():
             "ds_uncorrectable_errors": 56,
             "health": "good",
             "health_issues": [],
+            "us_capacity_mbps": 50.0,
         },
         "ds_channels": [
             {
@@ -92,6 +98,160 @@ class TestIndexRoute:
         resp = client.get("/?lang=de")
         assert resp.status_code == 200
 
+    def test_index_with_incomplete_bnetz(self, tmp_path, sample_analysis):
+        """Dashboard hides BNetzA card when entry has NULL fields (#148)."""
+        mgr = ConfigManager(str(tmp_path / "data_bnetz"))
+        mgr.save({"modem_password": "test", "modem_type": "fritzbox"})
+        init_config(mgr)
+        storage = SnapshotStorage(str(tmp_path / "data_bnetz" / "docsight.db"))
+        init_storage(storage)
+        app.config["TESTING"] = True
+        # Save a BNetzA measurement with all numeric fields as None
+        bs = BnetzStorage(storage.db_path)
+        bs.save_bnetz_measurement({
+            "date": "2025-06-01",
+            "measurements_download": [],
+            "measurements_upload": [],
+        })
+        update_state(analysis=sample_analysis)
+        with app.test_client() as c:
+            resp = c.get("/")
+        assert resp.status_code == 200
+        assert b"bnetz_has_deviation" not in resp.data  # card should not render
+
+
+class TestComplaintRoutes:
+    def test_get_comparison_data_helper(self):
+        from app.modules.reports.routes import _get_comparison_data
+
+        comparison_data = {
+            "period_a": {"from": "2026-03-01T00:00:00Z", "to": "2026-03-01T23:59:00Z"},
+            "period_b": {"from": "2026-03-08T00:00:00Z", "to": "2026-03-08T23:59:00Z"},
+            "delta": {"verdict": "degraded"},
+        }
+
+        with app.test_request_context(
+            "/api/complaint"
+            "?comparison_from_a=2026-03-01T00:00:00Z"
+            "&comparison_to_a=2026-03-01T23:59:00Z"
+            "&comparison_from_b=2026-03-08T00:00:00Z"
+            "&comparison_to_b=2026-03-08T23:59:00Z"
+        ):
+            with patch("app.modules.comparison.routes.compare_periods", return_value=comparison_data):
+                result = _get_comparison_data(object())
+
+        assert result == comparison_data
+
+    def test_no_docsis_shows_placeholder(self, client):
+        """Generic router with empty channels shows no-DOCSIS placeholder."""
+        analysis = {
+            "summary": {
+                "ds_total": 0, "us_total": 0,
+                "ds_power_min": 0, "ds_power_max": 0, "ds_power_avg": 0,
+                "us_power_min": 0, "us_power_max": 0, "us_power_avg": 0,
+                "ds_snr_min": 0, "ds_snr_avg": 0, "ds_snr_max": 0,
+                "ds_correctable_errors": 0, "ds_uncorrectable_errors": 0,
+                "ds_uncorr_pct": 0,
+                "health": "good", "health_issues": [],
+                "us_capacity_mbps": 0,
+            },
+            "ds_channels": [],
+            "us_channels": [],
+        }
+        update_state(analysis=analysis)
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert b"no-docsis-placeholder" in resp.data
+        # DOCSIS-specific sections should NOT appear
+        assert b"hero-card" not in resp.data
+        assert b"channel-table" not in resp.data
+
+    def test_no_docsis_shows_speedtest_card(self, tmp_path):
+        """When has_docsis=false but speedtest is configured, speed card appears."""
+        mgr = ConfigManager(str(tmp_path / "data_speed"))
+        mgr.save({
+            "modem_type": "generic",
+            "speedtest_tracker_url": "http://speedtest.local",
+            "speedtest_tracker_token": "testtoken123",
+        })
+        init_config(mgr)
+        init_storage(None)
+        app.config["TESTING"] = True
+
+        analysis = {
+            "summary": {
+                "ds_total": 0, "us_total": 0,
+                "ds_power_min": 0, "ds_power_max": 0, "ds_power_avg": 0,
+                "us_power_min": 0, "us_power_max": 0, "us_power_avg": 0,
+                "ds_snr_min": 0, "ds_snr_avg": 0, "ds_snr_max": 0,
+                "ds_correctable_errors": 0, "ds_uncorrectable_errors": 0,
+                "ds_uncorr_pct": 0,
+                "health": "good", "health_issues": [],
+                "us_capacity_mbps": 0,
+            },
+            "ds_channels": [],
+            "us_channels": [],
+        }
+        update_state(
+            analysis=analysis,
+            speedtest_latest={
+                "download_mbps": 230.5,
+                "upload_mbps": 41.2,
+                "ping_ms": 12.0,
+                "jitter_ms": 1.5,
+                "packet_loss_pct": 0,
+            },
+        )
+        with app.test_client() as c:
+            resp = c.get("/")
+        assert resp.status_code == 200
+        html = resp.data
+        # No-DOCSIS placeholder should still appear
+        assert b"no-docsis-placeholder" in html
+        # Speed card should appear in the non-DOCSIS section
+        assert b"230" in html  # download speed value
+        assert b"41" in html   # upload speed value
+        assert b"12 ms Ping" in html
+
+
+class TestSettingsRoute:
+    def test_settings_contains_comcast_xfinity_isp_option(self, client):
+        resp = client.get("/settings?lang=en")
+        assert resp.status_code == 200
+        assert b"Comcast/Xfinity" in resp.data
+
+    def test_settings_modules_lists_builtin_features(self, client):
+        resp = client.get("/settings?lang=en")
+        assert resp.status_code == 200
+        assert b"Built-in Features" in resp.data
+        assert b"Gaming Quality Index" in resp.data
+        assert b"Segment Utilization" in resp.data
+        assert b"Requires FRITZ!OS 8.20 or newer" in resp.data
+
+    def test_settings_connection_includes_segment_toggle_for_fritzbox(self, client):
+        resp = client.get("/settings?lang=en")
+        assert resp.status_code == 200
+        assert b"Collect segment utilization" in resp.data
+        assert b'name="segment_utilization_enabled"' in resp.data
+
+    def test_settings_modules_shows_segment_disabled_status(self, client, config_mgr):
+        config_mgr.save({"segment_utilization_enabled": False})
+        init_config(config_mgr)
+        resp = client.get("/settings?lang=en")
+        assert resp.status_code == 200
+        assert b"Segment Utilization" in resp.data
+        assert b"Disabled" in resp.data
+
+
+class TestIndexRoute:
+    def test_index_hides_segment_tab_when_disabled(self, client, config_mgr, sample_analysis):
+        config_mgr.save({"segment_utilization_enabled": False})
+        init_config(config_mgr)
+        update_state(analysis=sample_analysis)
+        resp = client.get("/?lang=en")
+        assert resp.status_code == 200
+        assert b'data-view="segment-utilization"' not in resp.data
+
 
 class TestHealthEndpoint:
     def test_health_waiting(self, client):
@@ -100,7 +260,8 @@ class TestHealthEndpoint:
         from app.web import _state
         _state["analysis"] = None
         resp = client.get("/health")
-        assert resp.status_code == 503
+        assert resp.status_code == 200
+        assert resp.get_json()["docsis_health"] == "waiting"
 
     def test_health_ok(self, client, sample_analysis):
         update_state(analysis=sample_analysis)
@@ -109,6 +270,24 @@ class TestHealthEndpoint:
         data = json.loads(resp.data)
         assert data["status"] == "ok"
         assert data["docsis_health"] == "good"
+
+    def test_reset_modem_state_clears_stale_dashboard_data(self, client, sample_analysis):
+        update_state(
+            analysis=sample_analysis,
+            device_info={"model": "Generic Router"},
+            connection_info={"connection_type": "generic"},
+            speedtest_latest={"download_mbps": 230.5},
+        )
+
+        reset_modem_state()
+        state = get_state()
+
+        assert state["analysis"] is None
+        assert state["device_info"] is None
+        assert state["connection_info"] is None
+        assert state["last_update"] is None
+        assert state["error"] is None
+        assert state["speedtest_latest"] == {"download_mbps": 230.5}
 
 
 class TestExportEndpoint:
@@ -128,11 +307,6 @@ class TestExportEndpoint:
         assert "Vodafone" in data["text"]
 
 
-class TestCalendarEndpoint:
-    def test_calendar_no_storage(self, client):
-        resp = client.get("/api/calendar")
-        assert resp.status_code == 200
-        assert json.loads(resp.data) == []
 
 
 class TestSnapshotsEndpoint:
@@ -140,6 +314,42 @@ class TestSnapshotsEndpoint:
         resp = client.get("/api/snapshots")
         assert resp.status_code == 200
         assert json.loads(resp.data) == []
+
+
+class TestSnapshotsAPI:
+    @pytest.fixture
+    def storage_with_data(self, tmp_path, sample_analysis):
+        storage = SnapshotStorage(str(tmp_path / "snap_test.db"), max_days=7)
+        storage.save_snapshot(sample_analysis)
+        return storage
+
+    def test_snapshots_list(self, client, storage_with_data):
+        init_storage(storage_with_data)
+        resp = client.get("/api/snapshots")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert isinstance(data, list)
+        assert len(data) >= 1
+
+    def test_snapshots_list_no_storage(self, client):
+        init_storage(None)
+        resp = client.get("/api/snapshots")
+        assert resp.status_code == 200
+        assert resp.get_json() == []
+
+    def test_snapshot_by_timestamp(self, client, storage_with_data):
+        init_storage(storage_with_data)
+        timestamps = storage_with_data.get_snapshot_list()
+        resp = client.get(f"/api/snapshots/{timestamps[0]}")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "summary" in data
+        assert "ds_channels" in data
+
+    def test_snapshot_not_found(self, client, storage_with_data):
+        init_storage(storage_with_data)
+        resp = client.get("/api/snapshots/1999-01-01T00:00:00Z")
+        assert resp.status_code == 404
 
 
 class TestSetupRoute:
@@ -203,12 +413,6 @@ class TestSecurityHeaders:
 
 
 class TestTimestampValidation:
-    def test_invalid_timestamp_rejected(self, client, sample_analysis):
-        update_state(analysis=sample_analysis)
-        resp = client.get("/?t=../../etc/passwd")
-        assert resp.status_code == 302
-        assert resp.headers["Location"] == "/"
-
     def test_valid_timestamp_accepted(self, client, sample_analysis):
         update_state(analysis=sample_analysis)
         # No storage, so snapshot lookup returns None and falls through to live view
@@ -248,6 +452,9 @@ class TestPollEndpoint:
 
     def test_poll_rate_limit(self, client, sample_analysis):
         import app.web as web_module
+        from unittest.mock import MagicMock
+        mock_collector = MagicMock()
+        web_module._modem_collector = mock_collector
         web_module._last_manual_poll = __import__('time').time()
         resp = client.post("/api/poll")
         assert resp.status_code == 429
@@ -255,6 +462,7 @@ class TestPollEndpoint:
         assert data["success"] is False
         # Reset for other tests
         web_module._last_manual_poll = 0.0
+        web_module._modem_collector = None
 
 
 class TestFormatK:
@@ -277,3 +485,386 @@ class TestFormatK:
     def test_invalid(self):
         from app.web import format_k
         assert format_k("bad") == "bad"
+
+
+@pytest.fixture
+def storage_client(tmp_path, config_mgr):
+    """Client with real storage for BNetzA tests."""
+    db_path = str(tmp_path / "test_web.db")
+    storage = SnapshotStorage(db_path, max_days=7)
+    bnetz_st = BnetzStorage(db_path)
+    init_config(config_mgr)
+    init_storage(storage)
+    # Reset module-local storage singletons
+    import app.modules.bnetz.routes as bnetz_routes
+    bnetz_routes._storage = None
+    app.config["TESTING"] = True
+    with app.test_client() as client:
+        yield client, storage, bnetz_st
+    init_storage(None)
+    bnetz_routes._storage = None
+
+
+class TestBnetzAPI:
+    def test_list_empty(self, storage_client):
+        client, _, _ = storage_client
+        resp = client.get("/api/bnetz/measurements")
+        assert resp.status_code == 200
+        assert resp.get_json() == []
+
+    def test_upload_no_file(self, storage_client):
+        client, _, _ = storage_client
+        resp = client.post("/api/bnetz/upload")
+        assert resp.status_code == 400
+
+    def test_upload_not_pdf(self, storage_client):
+        client, _, _ = storage_client
+        data = {"file": (io.BytesIO(b"not a pdf"), "test.pdf", "application/pdf")}
+        resp = client.post("/api/bnetz/upload", data=data, content_type="multipart/form-data")
+        assert resp.status_code == 400
+        assert "PDF" in resp.get_json()["error"]
+
+    def test_upload_and_list(self, storage_client):
+        client, _, bnetz_st = storage_client
+        # Directly insert via module storage (to avoid needing a real BNetzA PDF)
+        parsed = {
+            "date": "2025-02-04",
+            "provider": "Vodafone",
+            "tariff": "GigaZuhause 1000",
+            "download_max": 1000.0,
+            "download_normal": 850.0,
+            "download_min": 600.0,
+            "upload_max": 50.0,
+            "upload_normal": 35.0,
+            "upload_min": 15.0,
+            "measurement_count": 30,
+            "measurements_download": [],
+            "measurements_upload": [],
+            "download_measured_avg": 748.0,
+            "upload_measured_avg": 7.8,
+            "verdict_download": "deviation",
+            "verdict_upload": "deviation",
+        }
+        bnetz_st.save_bnetz_measurement(parsed, b"%PDF-test")
+        resp = client.get("/api/bnetz/measurements")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert len(data) == 1
+        assert data[0]["provider"] == "Vodafone"
+
+    def test_pdf_download(self, storage_client):
+        client, _, bnetz_st = storage_client
+        mid = bnetz_st.save_bnetz_measurement(
+            {"date": "2025-01-01", "measurements_download": [], "measurements_upload": []},
+            b"%PDF-download-test",
+        )
+        resp = client.get(f"/api/bnetz/pdf/{mid}")
+        assert resp.status_code == 200
+        assert resp.data == b"%PDF-download-test"
+        assert resp.content_type == "application/pdf"
+
+    def test_pdf_not_found(self, storage_client):
+        client, _, _ = storage_client
+        resp = client.get("/api/bnetz/pdf/9999")
+        assert resp.status_code == 404
+
+    def test_delete(self, storage_client):
+        client, _, bnetz_st = storage_client
+        mid = bnetz_st.save_bnetz_measurement(
+            {"date": "2025-01-01", "measurements_download": [], "measurements_upload": []},
+            b"%PDF-delete-test",
+        )
+        resp = client.delete(f"/api/bnetz/{mid}")
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+        # Verify deleted
+        resp = client.get("/api/bnetz/measurements")
+        assert resp.get_json() == []
+
+    def test_delete_not_found(self, storage_client):
+        client, _, _ = storage_client
+        resp = client.delete("/api/bnetz/9999")
+        assert resp.status_code == 404
+
+
+class TestConnectionEndpoint:
+    def test_no_connection_info(self, client):
+        resp = client.get("/api/connection")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["connection_type"] is None
+        assert data["max_downstream_kbps"] is None
+        assert data["max_upstream_kbps"] is None
+
+    def test_with_connection_info(self, client):
+        update_state(connection_info={
+            "connection_type": "DOCSIS 3.1",
+            "max_downstream_kbps": 250000,
+            "max_upstream_kbps": 40000,
+        })
+        data = client.get("/api/connection").get_json()
+        assert data["connection_type"] == "DOCSIS 3.1"
+        assert data["max_downstream_kbps"] == 250000
+        assert data["max_upstream_kbps"] == 40000
+
+    def test_isp_name_from_config(self, config_mgr):
+        config_mgr.save({"isp_name": "Vodafone"})
+        init_config(config_mgr)
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            data = c.get("/api/connection").get_json()
+        assert data["isp_name"] == "Vodafone"
+
+
+class TestGamingScoreEndpoint:
+    @pytest.fixture(autouse=True)
+    def reset_state(self):
+        from app.web import _state
+        _state["analysis"] = None
+        _state["speedtest_latest"] = None
+        yield
+        _state["analysis"] = None
+        _state["speedtest_latest"] = None
+
+    def test_no_data_returns_nulls(self, client):
+        resp = client.get("/api/gaming-score")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["score"] is None
+        assert data["grade"] is None
+        assert data["components"] == {}
+        assert data["has_speedtest"] is False
+        assert data["raw"] == {}
+        assert set(data["genres"].keys()) == {"fps", "moba", "mmo", "strategy"}
+
+    def test_with_analysis_no_speedtest(self, client, sample_analysis):
+        update_state(analysis=sample_analysis)
+        resp = client.get("/api/gaming-score")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert isinstance(data["score"], int)
+        assert data["grade"] in ("A", "B", "C", "D", "F")
+        assert data["has_speedtest"] is False
+        assert "docsis_health" in data["components"]
+        assert "snr_headroom" in data["components"]
+        assert data["raw"]["docsis_health"] == "good"
+        assert data["raw"]["ds_snr_min"] == 35.0
+        assert "ping_ms" not in data["raw"]
+
+    def test_with_analysis_and_speedtest(self, client, sample_analysis):
+        update_state(
+            analysis=sample_analysis,
+            speedtest_latest={"ping_ms": 15, "jitter_ms": 3, "packet_loss_pct": 0},
+        )
+        resp = client.get("/api/gaming-score")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["has_speedtest"] is True
+        assert "latency" in data["components"]
+        assert "jitter" in data["components"]
+        assert "packet_loss" in data["components"]
+        assert data["score"] >= 90  # perfect inputs should yield A
+        assert data["raw"]["ping_ms"] == 15
+        assert data["raw"]["jitter_ms"] == 3
+        assert data["raw"]["packet_loss_pct"] == 0
+        assert data["genres"]["fps"] == "ok"
+
+    def test_genres_degrade_with_grade(self, client, sample_analysis):
+        # Simulate a poor connection: zero SNR headroom, no speedtest
+        sample_analysis["summary"]["health"] = "poor"
+        sample_analysis["summary"]["ds_snr_min"] = 25.0
+        update_state(analysis=sample_analysis)
+        data = client.get("/api/gaming-score").get_json()
+        # Without speedtest data the score may still be partial, but genres key must exist
+        assert all(v in ("ok", "warn", "bad") for v in data["genres"].values())
+
+    def test_enabled_flag_reflects_config(self, config_mgr, sample_analysis):
+        config_mgr.save({"gaming_quality_enabled": True})
+        init_config(config_mgr)
+        update_state(analysis=sample_analysis)
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            data = c.get("/api/gaming-score").get_json()
+        assert data["enabled"] is True
+
+
+class TestChannelsAPI:
+    def test_channels_includes_summary(self, client, sample_analysis, tmp_path):
+        update_state(analysis=sample_analysis)
+        db_path = str(tmp_path / "channels_test.db")
+        storage = SnapshotStorage(db_path, max_days=7)
+        storage.save_snapshot(sample_analysis)
+        init_storage(storage)
+        resp = client.get("/api/channels")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "ds_channels" in data
+        assert "us_channels" in data
+        assert "summary" in data
+        assert data["summary"]["health"] == "good"
+        assert data["summary"]["ds_total"] == 33
+        assert "health_issues" in data["summary"]
+        assert "us_total" in data["summary"]
+        assert "us_capacity_mbps" in data["summary"]
+
+    def test_channels_no_storage(self, client):
+        from app.web import _state
+        _state["analysis"] = None
+        init_storage(None)
+        resp = client.get("/api/channels")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["ds_channels"] == []
+        assert data["summary"] is None
+
+
+class TestDeviceAPI:
+    def test_device_returns_info(self, client):
+        update_state(device_info={
+            "model": "FRITZ!Box 6690 Cable",
+            "manufacturer": "AVM",
+            "sw_version": "7.57",
+            "uptime_seconds": 86400,
+        })
+        resp = client.get("/api/device")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["model"] == "FRITZ!Box 6690 Cable"
+        assert data["uptime_seconds"] == 86400
+
+    def test_device_not_available(self, client):
+        from app.web import _state
+        _state["device_info"] = None
+        resp = client.get("/api/device")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data == {}
+
+
+class TestSpeedtestDetailAPI:
+    def _reset_speedtest_module(self):
+        import app.modules.speedtest.routes as st_routes
+        st_routes._storage = None
+
+    @pytest.fixture
+    def storage_with_speedtest(self, tmp_path):
+        db_path = str(tmp_path / "speed_test.db")
+        storage = SnapshotStorage(db_path, max_days=7)
+        ss = SpeedtestStorage(db_path)
+        ss.save_speedtest_results([{
+            "id": 42,
+            "timestamp": "2026-02-27T12:00:00Z",
+            "download_mbps": 500.0,
+            "upload_mbps": 50.0,
+            "download_human": "500 Mbps",
+            "upload_human": "50 Mbps",
+            "ping_ms": 12.0,
+            "jitter_ms": 2.0,
+            "packet_loss_pct": 0.0,
+            "server_id": 1,
+            "server_name": "Frankfurt",
+        }])
+        return storage
+
+    def test_speedtest_by_id(self, client, storage_with_speedtest):
+        self._reset_speedtest_module()
+        init_storage(storage_with_speedtest)
+        resp = client.get("/api/speedtest/42")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["id"] == 42
+        assert data["download_mbps"] == 500.0
+
+    def test_speedtest_not_found(self, client, storage_with_speedtest):
+        self._reset_speedtest_module()
+        init_storage(storage_with_speedtest)
+        resp = client.get("/api/speedtest/9999")
+        assert resp.status_code == 404
+
+    def test_speedtest_detail_includes_quality_fields(self, tmp_path):
+        """Issue #113: speedtest responses should include classification fields."""
+        self._reset_speedtest_module()
+        mgr = ConfigManager(str(tmp_path / "data_sq"))
+        mgr.save({"modem_password": "test", "modem_type": "fritzbox", "booked_download": 1000, "booked_upload": 50})
+        init_config(mgr)
+        db_path = str(tmp_path / "sq.db")
+        storage = SnapshotStorage(db_path, max_days=7)
+        ss = SpeedtestStorage(db_path)
+        ss.save_speedtest_results([{
+            "id": 1, "timestamp": "2026-02-27T12:00:00Z",
+            "download_mbps": 900.0, "upload_mbps": 45.0,
+            "download_human": "900 Mbps", "upload_human": "45 Mbps",
+            "ping_ms": 10.0, "jitter_ms": 1.0, "packet_loss_pct": 0.0,
+            "server_id": 1, "server_name": "Frankfurt",
+        }])
+        init_storage(storage)
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            resp = c.get("/api/speedtest/1")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            # 900/1000 = 0.9 >= 0.8 -> good
+            assert data["speed_health"] == "good"
+            assert data["download_class"] == "good"
+            # 45/50 = 0.9 >= 0.8 -> good
+            assert data["upload_class"] == "good"
+
+    def test_speedtest_quality_warn_and_poor(self, tmp_path):
+        self._reset_speedtest_module()
+        mgr = ConfigManager(str(tmp_path / "data_sq2"))
+        mgr.save({"modem_password": "test", "modem_type": "fritzbox", "booked_download": 1000, "booked_upload": 100})
+        init_config(mgr)
+        db_path = str(tmp_path / "sq2.db")
+        storage = SnapshotStorage(db_path, max_days=7)
+        ss = SpeedtestStorage(db_path)
+        ss.save_speedtest_results([{
+            "id": 10, "timestamp": "2026-02-27T12:00:00Z",
+            "download_mbps": 600.0, "upload_mbps": 30.0,
+            "download_human": "600 Mbps", "upload_human": "30 Mbps",
+            "ping_ms": 10.0, "jitter_ms": 1.0, "packet_loss_pct": 0.0,
+            "server_id": 1, "server_name": "Frankfurt",
+        }])
+        init_storage(storage)
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            resp = c.get("/api/speedtest/10")
+            data = resp.get_json()
+            # 600/1000 = 0.6 -> warn
+            assert data["download_class"] == "warn"
+            # 30/100 = 0.3 -> poor
+            assert data["upload_class"] == "poor"
+            # speed_health = worst of dl/ul = poor
+            assert data["speed_health"] == "poor"
+
+    def test_speedtest_quality_no_booked_speeds(self, client, storage_with_speedtest):
+        """Without booked speeds and no connection_info, quality fields should be null."""
+        self._reset_speedtest_module()
+        from app.web import _state
+        _state["connection_info"] = None
+        init_storage(storage_with_speedtest)
+        resp = client.get("/api/speedtest/42")
+        data = resp.get_json()
+        assert data["speed_health"] is None
+        assert data["download_class"] is None
+        assert data["upload_class"] is None
+
+
+class TestThresholdsAPI:
+    def test_thresholds_returns_data(self, client):
+        resp = client.get("/api/thresholds")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "downstream_power" in data
+        assert "upstream_power" in data
+        assert "snr" in data
+        assert "errors" in data
+
+    def test_thresholds_excludes_internal_keys(self, client):
+        resp = client.get("/api/thresholds")
+        data = resp.get_json()
+        assert "_source" not in data
+        assert "_note" not in data
+        for section in data.values():
+            if isinstance(section, dict):
+                assert "_comment" not in section
+                assert "_default" not in section

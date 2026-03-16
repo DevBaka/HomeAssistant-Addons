@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/docsight.png" alt="DOCSight" width="128">
+  <img src="docs/docsight-logo-v2.svg" alt="DOCSight" width="128">
 </p>
 
 <h1 align="center">DOCSight</h1>
@@ -8,48 +8,92 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/itsDNNS/docsight" alt="License"></a>
   <a href="https://github.com/itsDNNS/docsight/pkgs/container/docsight"><img src="https://img.shields.io/github/v/tag/itsDNNS/docsight?label=version" alt="Version"></a>
   <a href="https://github.com/itsDNNS/docsight/stargazers"><img src="https://img.shields.io/github/stars/itsDNNS/docsight?style=flat" alt="Stars"></a>
+  <a href="https://github.com/itsDNNS/docsight/pkgs/container/docsight"><img src="https://ghcr-badge.egpl.dev/itsdnns/docsight/size" alt="Image Size"></a>
+  <a href="https://selfh.st/weekly/2026-02-27/"><img src="https://img.shields.io/badge/selfh.st-Featured-blue" alt="Featured in selfh.st Weekly"></a>
 </p>
 
 <p align="center">
-  <strong>Your cable internet is slow and your provider says everything is fine?<br>DOCSight proves them wrong.</strong>
+  <strong>Your ISP says everything is fine. DOCSight gives you the proof that it isn't.</strong>
 </p>
 
 <p align="center">
-  DOCSight monitors your cable internet connection 24/7 and collects the hard evidence you need to hold your ISP accountable. One click generates a complaint letter with real data your provider can't ignore.
+  DOCSight monitors your cable internet 24/7, documents every signal issue, and generates complaint letters with hard evidence your provider can't dismiss.
 </p>
 
 <p align="center">
-  <em>For cable internet (DOCSIS/coax) only — Vodafone Kabel, Pyur, Tele Columbus, Virgin Media, Comcast, Spectrum, and others.</em>
+  Available in 🇬🇧 🇩🇪 🇪🇸 🇫🇷
 </p>
 
-![Dashboard Dark Mode](docs/screenshots/dashboard-dark.png)
+![Dashboard](docs/screenshots/dashboard-dark.png)
 
 ---
 
-## How It Works
+## Try It Now
 
-**Step 1: Install** — Run one command to start DOCSight on your computer or NAS:
+No router needed. Demo mode generates 9 months of realistic DOCSIS data so you can explore everything.
+
+```bash
+docker run -d --name docsight-demo -p 8765:8765 -e DEMO_MODE=true ghcr.io/itsdnns/docsight:latest
+```
+
+Open `http://localhost:8765` and see what DOCSight can do.
+
+---
+
+## What DOCSight Does
+
+<table>
+<tr>
+<td width="33%" valign="top">
+
+**Monitor**
+
+Tracks every DOCSIS signal metric around the clock: downstream power, upstream power, SNR, modulation, error rates, latency, and speed. Detects anomalies automatically.
+
+</td>
+<td width="33%" valign="top">
+
+**Document**
+
+Builds a timeline of evidence: signal trends, event log, incident journal, before/after comparisons, correlation analysis. Every issue is recorded with timestamps and data.
+
+</td>
+<td width="33%" valign="top">
+
+**Act**
+
+Generates ISP complaint letters backed by real measurements. One click creates a technical PDF with diagnostic data your provider has to take seriously.
+
+</td>
+</tr>
+</table>
+
+---
+
+## Quick Start
 
 ```bash
 docker run -d --name docsight -p 8765:8765 -v docsight_data:/data ghcr.io/itsdnns/docsight:latest
 ```
 
-> New to Docker? See the **[Installation Guide](INSTALL.md)** for step-by-step instructions (Windows, Mac, Linux, Synology NAS).
+Open `http://localhost:8765`, enter your router login, done.
 
-**Step 2: Connect your router** — Open `http://localhost:8765` in your browser. The setup wizard asks for your router login — that's it. Takes 2 minutes.
-
-**Step 3: Sit back** — DOCSight monitors your connection around the clock. When something is wrong, you'll see it immediately — and you can generate a complaint letter backed by real data.
+[Full installation guide](https://github.com/itsDNNS/docsight/wiki/Installation) | [Example Compose Stacks](https://github.com/itsDNNS/docsight/wiki/Example-Compose-Stacks)
 
 ---
 
-## Your Data Stays With You
+## From Suspicion to Evidence
 
-| | |
-|---|---|
-| **Runs 100% locally** | No cloud, no external servers. DOCSight runs entirely on your own hardware. |
-| **Nothing leaves your network** | Your data is never uploaded anywhere. Everything stays on your machine. |
-| **Open source** | All code is public. Anyone can read it and verify exactly what it does. |
-| **Credentials encrypted** | Your router login is encrypted at rest (AES-128) and never stored in plain text. |
+Most connection problems aren't one-time events. They come and go, making them nearly impossible to prove when you call your ISP.
+
+DOCSight runs in the background and builds your case over time:
+
+- **Hour 1** - You see your current signal health and any active issues
+- **Week 1** - Trend charts reveal patterns your ISP can't see from a single snapshot
+- **Month 1** - The event log, incident journal, and correlation analysis paint a complete picture
+- **When you call your ISP** - The complaint generator turns weeks of evidence into a professional letter with attached diagnostics
+
+The longer DOCSight runs, the stronger your evidence gets.
 
 ---
 
@@ -57,107 +101,73 @@ docker run -d --name docsight -p 8765:8765 -v docsight_data:/data ghcr.io/itsdnn
 
 | | |
 |---|---|
-| ✅ You have **cable internet** (coax/DOCSIS) | DOCSight is built for this |
+| ✅ You have **cable internet** (coax/DOCSIS) | DOCSight is built for this - full signal monitoring |
+| ✅ You have **fiber, DSL, or satellite** | Generic Router mode gives you speedtest tracking, incident journal, and more |
 | ✅ Your internet **drops out or is slower** than what you're paying for | DOCSight documents it |
 | ✅ Your ISP says **"everything is fine on our end"** | DOCSight gives you proof |
-| ❌ You have **DSL or fiber** | This tool won't work for you |
-| ✅ Your internet **works fine right now** | DOCSight builds a history — if problems start later, you already have proof of what "normal" looked like |
 
 ---
 
-## Glossary — What Do These Numbers Mean?
+## Your Data Stays With You
 
-The DOCSight dashboard shows technical measurements from your cable modem. Here's what they mean in plain language:
-
-| Term | What it means |
+| | |
 |---|---|
-| **DOCSIS** | The technology that makes cable internet work. Your internet signal travels through the same coaxial cable as TV. |
-| **Downstream / Upstream** | Downstream = download direction (Netflix, browsing). Upstream = upload direction (video calls, sending files). |
-| **SNR (Signal-to-Noise Ratio)** | How clear your signal is. Think of it like radio reception — high SNR means a clear signal, low SNR means static and interference. Measured in dB. |
-| **Power Level** | How strong your signal is. Too weak or too strong and your internet suffers. Measured in dBmV. |
-| **Uncorrectable Errors** | Data packets that were lost and couldn't be recovered. A few are normal, but many of these cause buffering, dropouts, and slow speeds. |
-| **Correctable Errors** | Data packets that arrived damaged but were automatically repaired. Lots of these are a warning sign. |
-| **QAM / Modulation** | How much data is packed into each signal. Higher QAM (like 256QAM or 4096QAM) means more speed. If your modem drops to a lower QAM, something is wrong with the signal. |
-| **Channels** | Your cable connection uses many frequencies at once (like lanes on a highway). Each lane is a "channel." More healthy channels = more bandwidth. |
+| 🏠 **Runs 100% locally** | No cloud, no external servers |
+| 🔒 **Nothing leaves your network** | Your data is never uploaded anywhere |
+| 📖 **Open source** | All code is public and verifiable |
+| 🔐 **Credentials encrypted** | Router login encrypted at rest (AES-128) |
 
 ---
 
 ## Features
 
-<details>
-<summary><strong>Monitoring & Diagnostics</strong></summary>
+### Core Evidence Workflow
 
-- **Web Dashboard**: Real-time channel data with health assessment, metric cards, and calendar navigation
-- **Health Assessment**: Automatic traffic-light evaluation with actionable recommendations
-- **Signal Trends**: Interactive charts with DOCSIS reference zones (color-coded thresholds) for day/week/month views
-- **Speedtest Tracker Integration**: Pull speed test results (download, upload, ping, jitter) from a self-hosted [Speedtest Tracker](https://github.com/alexjustesen/speedtest-tracker) instance with charts, sortable history, and anomaly highlighting
-- **Incident Report**: Two-step complaint flow with editable ISP letter + downloadable technical PDF
-- **LLM Export**: Generate structured reports for AI analysis (ChatGPT, Claude, Gemini, etc.)
-- **ThinkBroadband BQM**: Daily fetch and archive of broadband quality graphs with gallery view
+| Feature | Description |
+|---|---|
+| **[Live Dashboard](https://github.com/itsDNNS/docsight/wiki/Features-Dashboard)** | Real-time channel data with health assessment, actionable insights, and expandable channel details |
+| **[Signal Trends](https://github.com/itsDNNS/docsight/wiki/Features-Signal-Trends)** | Interactive charts with DOCSIS reference zones (day/week/month) |
+| **[Before/After Comparison](https://github.com/itsDNNS/docsight/wiki/Features-Before-After-Comparison)** | Compare two time periods side by side with presets, delta summaries, and complaint-ready evidence |
+| **[Correlation Analysis](https://github.com/itsDNNS/docsight/wiki/Features-Correlation-Analysis)** | Unified timeline combining signal, speedtest, and event data |
+| **[Connection Monitor](https://github.com/itsDNNS/docsight/wiki/Features-Connection-Monitor)** | Always-on latency monitor with outage detection, packet loss tracking, and CSV evidence export |
+| **[Event Log](https://github.com/itsDNNS/docsight/wiki/Features-Event-Log)** | Automatic anomaly detection with modulation watchdog |
+| **[Incident Journal](https://github.com/itsDNNS/docsight/wiki/Features-Incident-Journal)** | Document ISP issues with icons, Excel/CSV import, attachments, incident groups, and export |
+| **[Complaint Generator](https://github.com/itsDNNS/docsight/wiki/Filing-a-Complaint)** | Editable ISP letter + downloadable technical PDF with diagnostic notes and comparison evidence |
 
-</details>
+### Monitoring And Analysis
 
-<details>
-<summary><strong>Ease of Use</strong></summary>
+| Feature | Description |
+|---|---|
+| **[Gaming Quality Index](https://github.com/itsDNNS/docsight/wiki/Features-Gaming-Quality)** | A-F grade for gaming readiness based on latency, jitter, and signal health |
+| **[Modulation Performance](https://github.com/itsDNNS/docsight/wiki/Features-Modulation-Performance)** | Per-protocol-group modulation health index with intraday channel drill-down |
+| **[Cable Segment Utilization](https://github.com/itsDNNS/docsight/wiki/Features-Segment-Utilization)** | FRITZ!Box cable segment load monitoring with downstream/upstream utilization charts |
+| **[Channel Timeline](https://github.com/itsDNNS/docsight/wiki/Features-Channel-Timeline)** | Per-channel power, SNR, error, and modulation history with multi-channel comparison overlay |
+| **[Speedtest Integration](https://github.com/itsDNNS/docsight/wiki/Features-Speedtest)** | Speed test history from [Speedtest Tracker](https://github.com/alexjustesen/speedtest-tracker) |
+| **[BNetzA Measurements](https://github.com/itsDNNS/docsight/wiki/Features-BNetzA)** | Upload or auto-import official BNetzA broadband measurement protocols (PDF/CSV) |
+| **[BQM Integration](https://github.com/itsDNNS/docsight/wiki/Features-BQM)** | ThinkBroadband broadband quality graphs |
+| **[Smokeping Integration](https://github.com/itsDNNS/docsight/wiki/Features-Smokeping)** | External latency graphs from your Smokeping instance |
+| **[In-App Glossary](https://github.com/itsDNNS/docsight/wiki/Features-Glossary)** | Contextual help explaining DOCSIS terminology directly on the dashboard |
 
-- **Setup Wizard**: Browser-based configuration — no .env file needed
-- **4 Languages**: English, German, French, and Spanish UI (181+ translation keys each)
-- **Light/Dark Mode**: Persistent theme toggle
-- **URL Hash Routing**: Bookmark and share specific views (#trends, #speedtest, #bqm)
-- **Zero JavaScript Dependencies**: All charts are pure HTML5 Canvas — no Chart.js, no libraries
-- **Optional Authentication**: Password-protected web UI with scrypt hashing
+### Platform And Ecosystem
 
-</details>
+| Feature | Description |
+|---|---|
+| **[Home Assistant](https://github.com/itsDNNS/docsight/wiki/Home-Assistant)** | MQTT Auto-Discovery with per-channel sensors |
+| **[Backup & Restore](https://github.com/itsDNNS/docsight/wiki/Backup-and-Restore)** | One-click backup, scheduled backups, restore from setup wizard |
+| **Notifications** | Alerts via webhook, ntfy, Discord, Gotify, and custom endpoints |
+| **[LLM Export](https://github.com/itsDNNS/docsight/wiki/Features-LLM-Export)** | Structured reports for AI analysis |
+| **[Demo Mode](https://github.com/itsDNNS/docsight/wiki/Features-Demo-Mode)** | Try DOCSight without a router - 9 months of simulated data with live migration |
+| **[Theme Engine](https://github.com/itsDNNS/docsight/wiki/Themes)** | Built-in themes with live preview, instant switching, and community theme registry |
+| **[Community Modules](https://github.com/itsDNNS/docsight-modules)** | Extend DOCSight with community-built modules |
 
-<details>
-<summary><strong>Smart Home Integration</strong> (optional)</summary>
+4 languages (EN/DE/FR/ES) | Light/Dark mode | Themes | PWA/Offline | Setup wizard | Optional authentication | API tokens
 
-- **MQTT Auto-Discovery**: Zero-config integration with Home Assistant
-- **Per-Channel + Summary Sensors**: Every DOCSIS channel and aggregated metrics as HA entities
+---
 
-</details>
-
-<details>
-<summary><h2>Configuration</h2></summary>
-
-Configuration is stored in `config.json` inside the Docker volume and persists across restarts. Environment variables override config.json values.
-
-### Via Web UI (recommended)
-
-1. Start the container - the setup wizard opens automatically
-2. Enter your modem URL, username, and password - test the connection
-3. Optionally configure MQTT broker for Home Assistant integration
-4. Set poll interval, history retention, and language
-5. Done - monitoring starts immediately
-
-Access `/settings` at any time to change configuration, set an admin password, or toggle light/dark mode.
-
-### Via Environment Variables (optional)
-
-Copy `.env.example` to `.env` and edit:
-
-| Variable | Default | Description |
-|---|---|---|
-| `MODEM_URL` | `http://192.168.178.1` | Modem URL |
-| `MODEM_USER` | - | Modem username |
-| `MODEM_PASSWORD` | - | Modem password |
-| `MQTT_HOST` | - | MQTT broker host (optional) |
-| `MQTT_PORT` | `1883` | MQTT broker port |
-| `MQTT_USER` | - | MQTT username (optional) |
-| `MQTT_PASSWORD` | - | MQTT password (optional) |
-| `MQTT_TOPIC_PREFIX` | `docsight` | MQTT topic prefix |
-| `POLL_INTERVAL` | `900` | Polling interval in seconds |
-| `WEB_PORT` | `8765` | Web UI port |
-| `HISTORY_DAYS` | `0` | Snapshot retention in days (0 = unlimited) |
-| `ADMIN_PASSWORD` | - | Web UI password (optional) |
-| `BQM_URL` | - | ThinkBroadband BQM share URL (.png, optional) |
-| `SPEEDTEST_TRACKER_URL` | - | Speedtest Tracker URL (optional) |
-| `SPEEDTEST_TRACKER_TOKEN` | - | Speedtest Tracker API token (optional) |
-
-</details>
+## Screenshots
 
 <details>
-<summary><h2>Screenshots</h2></summary>
+<summary>Click to expand</summary>
 
 | Dashboard (Dark) | Dashboard (Light) |
 |---|---|
@@ -167,108 +177,159 @@ Copy `.env.example` to `.env` and edit:
 |---|---|
 | ![Trends](docs/screenshots/trends.png) | ![Health](docs/screenshots/health-banner.png) |
 
-| Speedtest Tracker | BQM Gallery |
+| Speedtest Tracker | Incident Journal |
 |---|---|
-| ![Speedtest](docs/screenshots/speedtest.png) | ![BQM](docs/screenshots/bqm.png) |
+| ![Speedtest](docs/screenshots/speedtest.png) | ![Journal](docs/screenshots/journal.png) |
+
+| Import (Excel/CSV) | Edit with Icon Picker |
+|---|---|
+| ![Import](docs/screenshots/import-modal.png) | ![Edit](docs/screenshots/incident-edit.png) |
+
+| Channel Timeline | Event Log |
+|---|---|
+| ![Channel Timeline](docs/screenshots/channel-timeline.png) | ![Events](docs/screenshots/events.png) |
+
+| Correlation Analysis | Settings |
+|---|---|
+| ![Correlation](docs/screenshots/correlation.png) | ![Settings](docs/screenshots/settings.png) |
+
+| Theme Gallery | BQM Integration |
+|---|---|
+| ![Themes](docs/screenshots/themes.png) | ![BQM](docs/screenshots/bqm.png) |
 
 </details>
 
-<details>
-<summary><h2>Home Assistant Integration</h2></summary>
+---
 
-DOCSight can optionally publish all channel data to Home Assistant via MQTT Auto-Discovery. This is not required to use DOCSight.
+## Supported Hardware
 
-### Per-Channel (~37 DS + 4 US)
+15 modem families supported out of the box.
 
-- `sensor.docsight_ds_ch{id}` - State: Power (dBmV), Attributes: frequency, modulation, snr, errors, docsis_version, health
-- `sensor.docsight_us_ch{id}` - State: Power (dBmV), Attributes: frequency, modulation, multiplex, docsis_version, health
+### Common Setups
 
-### Summary (14)
-
-| Sensor | Unit | Description |
+| | Status | Notes |
 |---|---|---|
-| `docsight_health` | - | Overall health (good/marginal/poor) |
-| `docsight_health_details` | - | Detail text |
-| `docsight_ds_total` | - | Number of downstream channels |
-| `docsight_ds_power_min/max/avg` | dBmV | Downstream power range |
-| `docsight_ds_snr_min/avg` | dB | Downstream signal-to-noise |
-| `docsight_ds_correctable_errors` | - | Total correctable errors |
-| `docsight_ds_uncorrectable_errors` | - | Total uncorrectable errors |
-| `docsight_us_total` | - | Number of upstream channels |
-| `docsight_us_power_min/max/avg` | dBmV | Upstream power range |
+| **Vodafone Station** (CGA4233, TG3442DE) | ✅ Supported | Bridge mode compatible |
+| **AVM Fritz!Box Cable** (6490, 6590, 6591, 6660, 6690) | ✅ Supported | |
+| **Vodafone Ultra Hub 7** (Sercomm) | ✅ Supported | |
+| **Unitymedia Connect Box** (CH7465) | ✅ Supported | |
+| **Sagemcom F@st 3896** | ✅ Supported | JSON-RPC API |
+| **Technicolor TC4400** | ✅ Supported | |
+| **Generic Router** (fiber, DSL, satellite) | ✅ Supported | No DOCSIS data - speedtest, journal, BNetzA, and modules work |
 
-</details>
+### Standalone DOCSIS Modems
 
-<details>
-<summary><h2>Reference Values</h2></summary>
+| | Status | Notes |
+|---|---|---|
+| **Arris CM3500B** | ✅ Supported | HTTPS enforced, mixed DOCSIS 3.0/3.1 |
+| **Arris SB6141** | ✅ Supported | DOCSIS 3.0 standalone |
+| **Arris SB6190** | ✅ Supported | DOCSIS 3.0 standalone |
+| **Arris SURFboard** (S33, S34, SB8200) | ✅ Supported | HNAP1 API |
+| **Arris Touchstone CM8200A** | ✅ Supported | ISP-branded DOCSIS 3.1 |
+| **Hitron CODA-56** | ✅ Supported | DOCSIS 3.1 |
+| **Netgear CM3000** | ✅ Supported | DOCSIS 3.1 standalone |
 
-| Metric | Good | Marginal | Poor |
-|---|---|---|---|
-| DS Power | -7..+7 dBmV | +/-7..+/-10 | > +/-10 dBmV |
-| US Power | 35..49 dBmV | 50..54 | > 54 dBmV |
-| SNR / MER | > 30 dB | 25..30 | < 25 dB |
+### Community And Extensibility
 
-</details>
+| | Status | Notes |
+|---|---|---|
+| **Other DOCSIS modems** | [Community drivers](https://github.com/itsDNNS/docsight-modules) or [add your own](https://github.com/itsDNNS/docsight/wiki/Adding-Modem-Support) | |
+
+Works with any DOCSIS cable provider worldwide. Non-cable users can select Generic Router during setup.
+
+> **Currently focused on the German cable market** (BNetzA measurements, VFKD thresholds, complaint templates). The core monitoring works with any DOCSIS modem - community contributions for other markets are welcome!
+
+---
+
+## Architecture
+
+DOCSight uses a **modular collector-based architecture** for reliable data gathering from multiple sources:
+
+```mermaid
+flowchart TD
+    subgraph CR["Collector Registry"]
+        MC["Modem Collector"]
+        DC["Demo Collector"]
+        SC["Speedtest Collector"]
+        BC["BQM Collector"]
+        SP["Smokeping Proxy"]
+        BN["BNetzA Watcher"]
+        BK["Backup Collector"]
+    end
+
+    MC --> BASE
+    DC --> BASE
+    SC --> BASE
+    BC --> BASE
+    SP --> BASE
+    BN --> BASE
+    BK --> BASE
+
+    BASE["Base Collector (Fail Safe)<br/>Exponential backoff<br/>Auto reset after idle<br/>Health status monitoring"]
+    BASE --> EVT["Event Detector<br/>Anomaly detection and alerting"]
+    EVT --> STORE["SQLite Storage + MQTT<br/>Snapshots, trends, Home Assistant"]
+    STORE --> UI["Web UI (Flask)<br/>Dashboard, charts, reports"]
+```
+
+Architecture layers:
+
+- `Collectors`: modem, demo, speedtest, BQM, Smokeping, BNetzA, and backup inputs
+- `Base Collector`: shared fail-safe behavior like backoff, reset, and health handling
+- `Event Detector`: turns raw state changes into anomaly and alert events
+- `Storage + MQTT`: persists snapshots and exposes data to Home Assistant
+- `Web UI`: presents dashboards, trends, reports, and complaint workflows
+
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) for detailed technical documentation.
+
+---
 
 ## Requirements
 
-- Docker (or any OCI-compatible container runtime)
-- A DOCSIS cable modem or router with web interface (tested with AVM FRITZ!Box 6690 Cable)
-- MQTT broker (optional) — only needed for Home Assistant integration
-
-## Roadmap
-
-### Modulation & Signal Intelligence
-- [ ] **Modulation Watchdog**: Track and alert on QAM modulation changes per channel (e.g. 256QAM dropping to 16QAM) — the #1 symptom users report in cable forums
-- [ ] **Channel Heatmap**: Visual grid of all channels color-coded by modulation quality — spot frequency-dependent issues at a glance
-- [ ] **OFDMA Analysis**: Detect whether the modem uses a wide OFDMA block vs. many narrow SC-QAMs; flag subcarrier count fluctuations as potential ingress indicators; track OFDMA enable/disable impact
-- [ ] **Adaptive Polling**: Automatically increase poll frequency (e.g. every 10-30s) when uncorrectable errors spike, to capture incidents in high resolution
-- [ ] **Upstream Channel Count Monitoring**: Alert when upstream channels drop (e.g. from 5 to 1) — early indicator of return path issues
-- [ ] **Ingress/Return Path Scoring**: Composite score based on upstream power levels, modulation quality, and channel count to detect return path interference before total failure
-
-### Diagnosis & Reporting
-- [x] **Incident Report Export**: Two-step flow — editable ISP complaint letter with customer data fields + downloadable technical PDF with channel tables, worst values, and DIN threshold references (EN/DE/FR/ES)
-- [ ] **Incident Journal**: Built-in log to document ISP issues over time — date, title, detailed description, screenshot uploads. Replaces spreadsheet-based tracking and feeds directly into complaint letters and reports.
-- [ ] **Ping Correlation**: Built-in latency monitor (ping to configurable targets) overlaid on error graphs to prove causality between physical layer issues and packet loss — replaces manual PingPlotter usage
-- [ ] **Before/After Comparison**: Side-by-side overlay of two time periods (e.g. week before vs. after technician visit) to quantify improvements
-- [ ] **FritzBox Event Log Parser**: Extract and display T3/T4 Timeout events, Ranging Request failures, and other DOCSIS error codes from the modem's event log
-- [ ] **Plain-Language Explanations**: "What does this mean?" tooltips translating technical values into actionable advice (e.g. "Your upstream power is critically high — this means the signal has to travel too far or passes through damaged cable")
-
-### Alerting & Notifications
-- [ ] **Notification System**: Configurable alerts via webhook, Telegram, Discord, email, or Gotify/ntfy on health degradation, modulation drops, or connectivity loss
-- [ ] **Power Level Drift Detection**: Alert on relative changes (e.g. +3 dB in 24h) in addition to absolute thresholds — catch creeping degradation before it causes outages
-- [ ] **Scheduled Health Digest**: Daily/weekly summary email or message with connection quality score, error trends, and notable events
-- [ ] **Gaming/Real-Time Quality Index**: Dedicated score for latency-sensitive applications based on jitter, packet loss bursts, and modulation stability
-
-### External Monitoring Integration
-- [x] **ThinkBroadband BQM**: Daily fetch and archive of external broadband quality graphs (latency, packet loss)
-- [x] **Speedtest Tracker**: Pull speed test results from self-hosted [Speedtest Tracker](https://github.com/alexjustesen/speedtest-tracker) with interactive charts, sortable history, anomaly highlighting, and incremental SQLite caching
-- [ ] **Smokeping Integration**: Import or display Smokeping latency data alongside DOCSIS metrics for end-to-end correlation
-
-### Enhanced Dashboard
-- [ ] **Update Changelog Splash**: Show a "What's New" dialog on first login after a version update — highlights new features and changes so users stay informed without reading GitHub Releases
-- [ ] Combined timeline: DOCSIS health + speed tests + BQM graph + ping data on a single time axis
-- [ ] Mobile-responsive layout
-- [ ] Segment load indicator: Visualize peak-hour degradation patterns (e.g. 20:00-23:00 slowdowns)
-- [ ] Network uptime calendar: Month-view heatmap showing daily connection quality at a glance
-- [ ] Power level drift detection: Alert on relative changes (e.g. +3 dB in 24h) in addition to absolute thresholds
-- [x] Manual poll buttons: Trigger FritzBox and Speedtest Tracker data refresh on demand
-
-### Multi-Modem Support
-- [ ] Plugin architecture for modem drivers
-- [ ] **Vodafone Station / CommScope driver**: Support for the most common ISP-provided cable modem in Germany
-- [ ] **Arris / Technicolor / Sagemcom drivers**: Cover the long tail of ISP-provided hardware
-- [ ] SNMP-based generic driver for additional cable modem models
-- [ ] Community-contributed drivers with documentation template
+- Docker (or any OCI-compatible container runtime) - or see [Running without Docker](https://github.com/itsDNNS/docsight/wiki/Running-without-Docker) for a native Python setup
+- A supported DOCSIS cable modem/router (see above), or any router via Generic Router mode
+- MQTT broker (optional, for Home Assistant)
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md). **Please open an issue before working on new features.**
+
+## Roadmap
+
+See the **[full roadmap](https://github.com/itsDNNS/docsight/wiki/Roadmap)** in the wiki for long-term goals and modem support plans.
 
 ## Changelog
 
-See [GitHub Releases](https://github.com/itsDNNS/docsight/releases) for release notes and changelogs.
+See [GitHub Releases](https://github.com/itsDNNS/docsight/releases).
+
+## Support
+
+If DOCSight helps you, consider supporting development:
+
+<a href="https://github.com/sponsors/itsDNNS"><img src="https://img.shields.io/badge/GitHub%20Sponsors-Support%20DOCSight-24292f?logo=github&logoColor=white" alt="GitHub Sponsors"></a>
+<a href="https://ko-fi.com/itsdnns"><img src="https://img.shields.io/badge/Ko--fi-Support%20DOCSight-ff5e5b?logo=ko-fi&logoColor=white" alt="Ko-fi"></a>
+<a href="https://paypal.me/itsDNNS"><img src="https://img.shields.io/badge/Donate-PayPal-00457C?logo=paypal&logoColor=white" alt="PayPal"></a>
+
+DOCSight is open source and donations help fund ongoing development, hardware testing, documentation, and support work.
+
+## Brand Use
+
+The code is MIT-licensed, but the `DOCSight` name, logo, and project branding are governed separately. Community forks and commercial services may say they are "based on DOCSight" or "compatible with DOCSight", but must not present themselves as the official project without permission.
+
+See [TRADEMARKS.md](TRADEMARKS.md) for the full brand and trademark policy.
+
+## Documentation
+
+| Document | Scope |
+|---|---|
+| [Wiki](https://github.com/itsDNNS/docsight/wiki) | User guides, feature docs, setup instructions |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Technical architecture and extension guide |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Development and contribution guidelines |
+| [TRADEMARKS.md](TRADEMARKS.md) | Brand, logo, and official-use policy |
 
 ## License
 
 [MIT](LICENSE)
+
+<p align="center">
+  <sub><strong>DOCSight</strong> = <strong>DOCS</strong>IS + In<strong>sight</strong> (+ a quiet <em>sigh</em> from every cable internet user)</sub>
+</p>

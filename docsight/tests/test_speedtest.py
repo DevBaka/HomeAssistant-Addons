@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
-from app.speedtest import SpeedtestClient
+from app.modules.speedtest.client import SpeedtestClient
 from app.web import app, init_config, init_storage
 from app.config import ConfigManager
 
@@ -52,7 +52,7 @@ class TestSpeedtestClient:
     def _make_client(self):
         return SpeedtestClient("http://speedtest.local:8999", "test-token")
 
-    @patch("app.speedtest.requests.Session.get")
+    @patch("app.modules.speedtest.client.requests.Session.get")
     def test_get_latest_success(self, mock_get):
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"data": [SAMPLE_RESULT]}
@@ -72,7 +72,7 @@ class TestSpeedtestClient:
         assert r["download_human"] == "1.10 Gbps"
         assert r["timestamp"] == "2025-01-15T10:30:00Z"
 
-    @patch("app.speedtest.requests.Session.get")
+    @patch("app.modules.speedtest.client.requests.Session.get")
     def test_get_latest_empty(self, mock_get):
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"data": []}
@@ -83,7 +83,7 @@ class TestSpeedtestClient:
         results = client.get_latest(1)
         assert results == []
 
-    @patch("app.speedtest.requests.Session.get")
+    @patch("app.modules.speedtest.client.requests.Session.get")
     def test_get_latest_connection_error(self, mock_get):
         mock_get.side_effect = Exception("Connection refused")
 
@@ -91,7 +91,7 @@ class TestSpeedtestClient:
         results = client.get_latest(1)
         assert results == []
 
-    @patch("app.speedtest.requests.Session.get")
+    @patch("app.modules.speedtest.client.requests.Session.get")
     def test_get_results_pagination(self, mock_get):
         mock_resp = MagicMock()
         mock_resp.json.return_value = {**SAMPLE_API_RESPONSE, "meta": {"last_page": 1}}
@@ -107,7 +107,7 @@ class TestSpeedtestClient:
         assert params["page[size]"] == 100
         assert params["page[number]"] == 1
 
-    @patch("app.speedtest.requests.Session.get")
+    @patch("app.modules.speedtest.client.requests.Session.get")
     def test_get_results_connection_error(self, mock_get):
         mock_get.side_effect = Exception("Timeout")
 
@@ -115,7 +115,7 @@ class TestSpeedtestClient:
         results = client.get_results()
         assert results == []
 
-    @patch("app.speedtest.requests.Session.get")
+    @patch("app.modules.speedtest.client.requests.Session.get")
     def test_parse_minimal_result(self, mock_get):
         """Result with empty data dict should not crash."""
         mock_resp = MagicMock()
@@ -141,6 +141,51 @@ class TestSpeedtestClient:
         client = SpeedtestClient("http://example.com:8999/", "tok")
         assert client.base_url == "http://example.com:8999"
 
+    @patch("app.modules.speedtest.client.requests.Session.get")
+    def test_get_latest_with_error_success(self, mock_get):
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"data": [SAMPLE_RESULT]}
+        mock_resp.raise_for_status = MagicMock()
+        mock_get.return_value = mock_resp
+
+        client = self._make_client()
+        results, error = client.get_latest_with_error(1)
+        assert len(results) == 1
+        assert error is None
+
+    @patch("app.modules.speedtest.client.requests.Session.get")
+    def test_get_latest_with_error_connection_error(self, mock_get):
+        import requests as req
+        mock_get.side_effect = req.ConnectionError("Connection refused")
+
+        client = self._make_client()
+        results, error = client.get_latest_with_error(1)
+        assert results == []
+        assert "ConnectionError" in error
+
+    @patch("app.modules.speedtest.client.requests.Session.get")
+    def test_get_latest_with_error_http_error(self, mock_get):
+        import requests as req
+        mock_resp = MagicMock()
+        mock_resp.status_code = 401
+        mock_resp.raise_for_status.side_effect = req.HTTPError(response=mock_resp)
+        mock_get.return_value = mock_resp
+
+        client = self._make_client()
+        results, error = client.get_latest_with_error(1)
+        assert results == []
+        assert "401" in error
+
+    @patch("app.modules.speedtest.client.requests.Session.get")
+    def test_get_latest_with_error_timeout(self, mock_get):
+        import requests as req
+        mock_get.side_effect = req.Timeout("timed out")
+
+        client = self._make_client()
+        results, error = client.get_latest_with_error(1)
+        assert results == []
+        assert "Timeout" in error
+
 
 # ── Config Tests ──
 
@@ -148,18 +193,19 @@ class TestSpeedtestClient:
 class TestSpeedtestConfig:
     def test_is_speedtest_configured_false(self, tmp_path):
         mgr = ConfigManager(str(tmp_path / "data"))
-        mgr.save({"modem_password": "test"})
+        mgr.save({"modem_password": "test", "modem_type": "fritzbox"})
         assert not mgr.is_speedtest_configured()
 
     def test_is_speedtest_configured_url_only(self, tmp_path):
         mgr = ConfigManager(str(tmp_path / "data"))
-        mgr.save({"modem_password": "test", "speedtest_tracker_url": "http://x"})
+        mgr.save({"modem_password": "test", "modem_type": "fritzbox", "speedtest_tracker_url": "http://x"})
         assert not mgr.is_speedtest_configured()
 
     def test_is_speedtest_configured_true(self, tmp_path):
         mgr = ConfigManager(str(tmp_path / "data"))
         mgr.save({
             "modem_password": "test",
+            "modem_type": "fritzbox",
             "speedtest_tracker_url": "http://x",
             "speedtest_tracker_token": "tok",
         })
@@ -169,6 +215,7 @@ class TestSpeedtestConfig:
         mgr = ConfigManager(str(tmp_path / "data"))
         mgr.save({
             "modem_password": "test",
+            "modem_type": "fritzbox",
             "speedtest_tracker_token": "my-secret-token",
         })
         # Raw value in file should not be the plaintext
@@ -183,24 +230,33 @@ class TestSpeedtestConfig:
 # ── API Tests ──
 
 
+def _reset_speedtest_module_storage():
+    """Reset the speedtest module's lazy-initialized storage between tests."""
+    import app.modules.speedtest.routes as speedtest_routes
+    speedtest_routes._storage = None
+
+
 @pytest.fixture
 def speedtest_client(tmp_path):
     data_dir = str(tmp_path / "data")
     mgr = ConfigManager(data_dir)
     mgr.save({
         "modem_password": "test",
+        "modem_type": "fritzbox",
         "speedtest_tracker_url": "http://speedtest.local:8999",
         "speedtest_tracker_token": "test-token",
     })
     init_config(mgr)
     init_storage(None)
+    _reset_speedtest_module_storage()
     app.config["TESTING"] = True
     with app.test_client() as client:
         yield client
+    _reset_speedtest_module_storage()
 
 
 class TestSpeedtestAPI:
-    @patch("app.speedtest.requests.Session.get")
+    @patch("app.modules.speedtest.client.requests.Session.get")
     def test_api_speedtest(self, mock_get, speedtest_client):
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"data": [SAMPLE_RESULT]}
@@ -214,12 +270,51 @@ class TestSpeedtestAPI:
         assert data[0]["download_mbps"] == 1100.0
         assert data[0]["ping_ms"] == 12.5
 
+    @patch("app.modules.speedtest.client.requests.Session.get")
+    def test_api_test_speedtest_success(self, mock_get, speedtest_client):
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"data": [SAMPLE_RESULT]}
+        mock_resp.raise_for_status = MagicMock()
+        mock_get.return_value = mock_resp
+
+        resp = speedtest_client.post("/api/test-speedtest", json={
+            "speedtest_tracker_url": "http://speedtest.local:8999",
+            "speedtest_tracker_token": "test-token",
+        })
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert data["results"] == 1
+        assert "download" in data["latest"]
+
+    def test_api_test_speedtest_missing_fields(self, speedtest_client):
+        resp = speedtest_client.post("/api/test-speedtest", json={})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is False
+        assert "required" in data["error"].lower()
+
+    @patch("app.modules.speedtest.client.requests.Session.get")
+    def test_api_test_speedtest_connection_error(self, mock_get, speedtest_client):
+        import requests as req
+        mock_get.side_effect = req.ConnectionError("Connection refused")
+
+        resp = speedtest_client.post("/api/test-speedtest", json={
+            "speedtest_tracker_url": "http://speedtest.local:8999",
+            "speedtest_tracker_token": "test-token",
+        })
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is False
+        assert "ConnectionError" in data["error"]
+
     def test_api_speedtest_not_configured(self, tmp_path):
         data_dir = str(tmp_path / "data2")
         mgr = ConfigManager(data_dir)
-        mgr.save({"modem_password": "test"})
+        mgr.save({"modem_password": "test", "modem_type": "fritzbox"})
         init_config(mgr)
         init_storage(None)
+        _reset_speedtest_module_storage()
         app.config["TESTING"] = True
         with app.test_client() as client:
             resp = client.get("/api/speedtest?days=7")

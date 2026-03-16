@@ -7,14 +7,31 @@ import os
 import re
 import stat
 import subprocess
+import threading
 import time
 from datetime import datetime, timedelta
 
-from flask import Flask, render_template, request, jsonify, redirect, session, url_for, make_response
+import requests as _requests
+
+from flask import Flask, render_template, request, jsonify, redirect, session, send_from_directory
 from werkzeug.security import check_password_hash
 
-from .config import POLL_MIN, POLL_MAX, PASSWORD_MASK, SECRET_KEYS
+from .config import POLL_MIN, POLL_MAX
+from .gaming_index import compute_gaming_index
 from .i18n import get_translations, LANGUAGES, LANG_FLAGS
+
+_IANA_REGIONS = {"Africa", "America", "Antarctica", "Arctic", "Asia",
+                 "Atlantic", "Australia", "Europe", "Indian", "Pacific"}
+
+def _get_iana_timezones():
+    """Return sorted list of IANA timezone names (no POSIX abbreviations)."""
+    from zoneinfo import available_timezones
+    return ["UTC"] + sorted(
+        tz for tz in available_timezones()
+        if tz.split("/")[0] in _IANA_REGIONS
+    )
+
+from .tz import guess_iana_timezone as _guess_iana_timezone
 
 def _server_tz_info():
     """Return server timezone name and UTC offset in minutes."""
@@ -24,6 +41,123 @@ def _server_tz_info():
     return name, offset_min
 
 log = logging.getLogger("docsis.web")
+audit_log = logging.getLogger("docsis.audit")
+
+_THEME_COLLECTIONS = [
+    {
+        "key": "signature",
+        "title_key": "theme_collection_signature",
+        "title_fallback": "Signature Themes",
+        "description_key": "theme_collection_signature_desc",
+        "description_fallback": "DOCSight's built-in identity themes",
+        "ids": (
+            "docsight.theme_classic",
+            "docsight.theme_tribu",
+            "docsight.theme_ocean",
+        ),
+    },
+    {
+        "key": "community",
+        "title_key": "theme_collection_community",
+        "title_fallback": "Community Favorites",
+        "description_key": "theme_collection_community_desc",
+        "description_fallback": "Popular palettes inspired by widely loved developer themes",
+        "ids": (
+            "docsight.theme_one_dark",
+            "docsight.theme_dracula",
+            "docsight.theme_catppuccin_mocha",
+            "docsight.theme_tokyo_night",
+            "docsight.theme_nord",
+            "docsight.theme_synthwave",
+            "docsight.theme_gruvbox",
+        ),
+    },
+    {
+        "key": "playful",
+        "title_key": "theme_collection_playful",
+        "title_fallback": "Easter Eggs",
+        "description_key": "theme_collection_playful_desc",
+        "description_fallback": "Delight-first themes for fun installs and screenshots",
+        "ids": (
+            "docsight.theme_matrix",
+            "docsight.theme_amber_terminal",
+            "docsight.theme_gameboy",
+            "docsight.theme_doom",
+        ),
+    },
+]
+
+_THEME_COLLECTION_INDEX = {
+    theme_id: (collection["key"], position)
+    for collection in _THEME_COLLECTIONS
+    for position, theme_id in enumerate(collection["ids"])
+}
+
+
+def _build_theme_collections(theme_modules):
+    """Group theme modules into curated gallery collections."""
+    grouped = {collection["key"]: [] for collection in _THEME_COLLECTIONS}
+
+    for mod in theme_modules:
+        collection_key = _THEME_COLLECTION_INDEX.get(mod.id, ("community", 999))[0]
+        grouped.setdefault(collection_key, []).append(mod)
+
+    collections = []
+    for collection in _THEME_COLLECTIONS:
+        modules = grouped.get(collection["key"], [])
+        if not modules:
+            continue
+        modules.sort(
+            key=lambda mod: (
+                _THEME_COLLECTION_INDEX.get(mod.id, (collection["key"], 999))[1],
+                mod.name.lower(),
+            )
+        )
+        collections.append({
+            **collection,
+            "modules": modules,
+        })
+
+    return collections
+
+# ── Login rate limiting (in-memory) ──
+_login_attempts = {}  # IP -> [timestamp, ...]
+_LOGIN_MAX_ATTEMPTS = 5
+_LOGIN_WINDOW = 900  # 15 min
+_LOGIN_LOCKOUT_BASE = 30  # seconds, doubles each excess attempt
+
+
+def _get_client_ip():
+    """Get client IP from request.remote_addr.
+
+    When REVERSE_PROXY is configured, Werkzeug's ProxyFix middleware
+    rewrites remote_addr from trusted X-Forwarded-For headers before
+    the request reaches Flask.  Without ProxyFix the raw TCP peer
+    address is used, which prevents X-Forwarded-For spoofing.
+    """
+    return request.remote_addr or "unknown"
+
+
+def _check_login_rate_limit(ip):
+    """Return seconds until retry allowed, or 0 if not limited."""
+    now = time.time()
+    attempts = _login_attempts.get(ip, [])
+    attempts = [t for t in attempts if now - t < _LOGIN_WINDOW]
+    _login_attempts[ip] = attempts
+    if len(attempts) >= _LOGIN_MAX_ATTEMPTS:
+        excess = len(attempts) - _LOGIN_MAX_ATTEMPTS
+        lockout = _LOGIN_LOCKOUT_BASE * (2 ** min(excess, 8))
+        remaining = lockout - (now - attempts[-1])
+        if remaining > 0:
+            return remaining
+    return 0
+
+
+def _record_failed_login(ip):
+    """Record a failed login attempt."""
+    if ip not in _login_attempts:
+        _login_attempts[ip] = []
+    _login_attempts[ip].append(time.time())
 
 def _get_version():
     """Get version from VERSION file, git tag, or fall back to 'dev'."""
@@ -47,21 +181,95 @@ def _get_version():
 
 APP_VERSION = _get_version()
 
+# GitHub update check (background, never blocks page loads)
+_update_cache = {"latest": None, "checked_at": 0, "checking": False}
+_UPDATE_CACHE_TTL = 3600  # 1 hour
+
+def _check_for_update():
+    """Return cached update info. Triggers background check if stale."""
+    now = time.time()
+    if now - _update_cache["checked_at"] < _UPDATE_CACHE_TTL:
+        return _update_cache["latest"]
+    if APP_VERSION == "dev":
+        return None
+    if not _update_cache["checking"]:
+        _update_cache["checking"] = True
+        import threading
+        threading.Thread(target=_fetch_update, daemon=True).start()
+    return _update_cache["latest"]
+
+def _fetch_update():
+    """Background thread: fetch latest release from GitHub."""
+    try:
+        r = _requests.get(
+            "https://api.github.com/repos/itsDNNS/docsight/releases/latest",
+            headers={"Accept": "application/vnd.github.v3+json"},
+            timeout=5,
+        )
+        if r.status_code == 200:
+            tag = r.json().get("tag_name", "")
+            cur = APP_VERSION.lstrip("v")
+            lat = tag.lstrip("v")
+            if lat and lat != cur and _version_newer(lat, cur):
+                _update_cache["latest"] = tag
+            else:
+                _update_cache["latest"] = None
+    except Exception:
+        pass  # keep previous cache value
+    finally:
+        _update_cache["checked_at"] = time.time()
+        _update_cache["checking"] = False
+
+def _version_newer(latest, current):
+    """Compare date-based version strings (e.g. '2026-02-16.1' > '2026-02-13.8')."""
+    return latest > current
+
+
 app = Flask(__name__, template_folder="templates")
 app.secret_key = os.urandom(32)  # overwritten by _init_session_key
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Strict",
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=24),
+)
 
-_TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _valid_date(date_str):
+    """Validate date string format AND actual calendar validity."""
+    if not date_str or not _DATE_RE.match(date_str):
+        return False
+    try:
+        datetime.strptime(date_str, "%Y-%m-%d")
+        return True
+    except ValueError:
+        return False
+_SAFE_HTML_RE = re.compile(r"<(?!/?(?:b|a|strong|em|br)\b)[^>]+>", re.IGNORECASE)
+
+
+@app.template_filter("safe_html")
+def safe_html_filter(value):
+    """Allow only <b>, <a>, <strong>, <em>, <br> tags — strip everything else."""
+    from markupsafe import Markup
+    cleaned = _SAFE_HTML_RE.sub("", str(value))
+    return Markup(cleaned)
 
 
 @app.template_filter("fmt_k")
 def format_k(value):
-    """Format large numbers with k suffix: 132007 -> 132k, 5929 -> 5.9k."""
+    """Format large numbers with k/M suffix: 1200000 -> 1.2M, 132007 -> 132k, 5929 -> 5.9k."""
     try:
         value = int(value)
     except (ValueError, TypeError):
         return str(value)
-    if value >= 100000:
+    if value >= 1000000:
+        # Million: 1.2M, 12M
+        formatted = f"{value / 1000000:.1f}"
+        if formatted.endswith(".0"):
+            formatted = formatted[:-2]
+        return formatted + "M"
+    elif value >= 100000:
         return f"{value // 1000}k"
     elif value >= 1000:
         formatted = f"{value / 1000:.1f}"
@@ -69,6 +277,31 @@ def format_k(value):
             formatted = formatted[:-2]
         return formatted + "k"
     return str(value)
+
+
+@app.template_filter("fmt_speed_value")
+def format_speed_value(value):
+    """Format speed value: >= 1000 Mbps -> GBit value."""
+    try:
+        value = float(value)
+    except (ValueError, TypeError):
+        return str(value)
+    if value >= 1000:
+        # Convert to GBit: 1094 -> 1.1
+        return f"{value / 1000:.1f}"
+    else:
+        # Keep as Mbps: 544 -> 544
+        return str(int(round(value)))
+
+
+@app.template_filter("fmt_speed_unit")
+def format_speed_unit(value):
+    """Return speed unit: >= 1000 Mbps -> 'GBit/s', else 'MBit/s'."""
+    try:
+        value = float(value)
+    except (ValueError, TypeError):
+        return "MBit/s"
+    return "GBit/s" if value >= 1000 else "MBit/s"
 
 
 def _get_lang():
@@ -80,7 +313,61 @@ def _get_lang():
         return _config_manager.get("language", "en")
     return "en"
 
+
+def _get_tz_name():
+    """Get configured IANA timezone name."""
+    if _config_manager:
+        tz = _config_manager.get("timezone")
+        if tz:
+            return tz
+    from .tz import guess_iana_timezone
+    return guess_iana_timezone()
+
+
+def _localize_timestamps(data, keys=("timestamp", "created_at", "updated_at", "last_used_at")):
+    """Convert UTC timestamps to local time in-place for API responses.
+
+    Works on dicts and lists of dicts. Modifies data in-place and returns it.
+    """
+    from .tz import to_local
+    tz = _get_tz_name()
+    if not tz:
+        return data
+    if isinstance(data, dict):
+        for k in keys:
+            if k in data and data[k] and isinstance(data[k], str) and data[k].endswith("Z"):
+                data[k] = to_local(data[k], tz)
+    elif isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict):
+                for k in keys:
+                    if k in item and item[k] and isinstance(item[k], str) and item[k].endswith("Z"):
+                        item[k] = to_local(item[k], tz)
+    return data
+
+
+# ── Jinja2 Filters for timestamp display ──
+
+def _jinja_localtime(value):
+    """Jinja2 filter: convert UTC timestamp to local display time."""
+    if not value or not isinstance(value, str):
+        return value
+    from .tz import to_local
+    tz = _get_tz_name()
+    return to_local(value, tz) if tz else value.rstrip("Z")
+
+
+def _jinja_localiso(value):
+    """Jinja2 filter: convert UTC timestamp to local ISO format (no Z)."""
+    return _jinja_localtime(value)
+
+
+app.jinja_env.filters["localtime"] = _jinja_localtime
+app.jinja_env.filters["localiso"] = _jinja_localiso
+
+
 # Shared state (updated from main loop)
+_state_lock = threading.Lock()
 _state = {
     "analysis": None,
     "last_update": None,
@@ -94,13 +381,88 @@ _state = {
 _storage = None
 _config_manager = None
 _on_config_changed = None
+_modem_collector = None
+_collectors = []
 _last_manual_poll = 0.0
+_module_loader = None
+
+
+def get_storage():
+    """Get the storage instance (set at runtime via init_storage)."""
+    return _storage
+
+
+def get_config_manager():
+    """Get the config manager (set at runtime via init_config)."""
+    return _config_manager
+
+
+def get_modem_collector():
+    """Get the modem collector (set at runtime via init_collector)."""
+    return _modem_collector
+
+
+def get_collectors():
+    """Get all collectors (set at runtime via init_collectors)."""
+    return _collectors
+
+
+def get_module_loader():
+    """Get the module loader instance."""
+    return _module_loader
+
+
+def get_on_config_changed():
+    """Get the config changed callback."""
+    return _on_config_changed
+
+
+def get_last_manual_poll():
+    """Get the timestamp of the last manual poll."""
+    return _last_manual_poll
+
+
+def set_last_manual_poll(value):
+    """Set the timestamp of the last manual poll."""
+    global _last_manual_poll
+    _last_manual_poll = value
 
 
 def init_storage(storage):
     """Set the snapshot storage instance."""
     global _storage
     _storage = storage
+
+
+def init_collector(modem_collector):
+    """Set the modem collector instance for manual polling."""
+    global _modem_collector
+    _modem_collector = modem_collector
+
+
+def init_collectors(collectors):
+    """Set the list of all collectors for status reporting."""
+    global _collectors
+    _collectors = collectors
+
+
+def init_modules(module_loader):
+    """Set the module loader instance."""
+    global _module_loader
+    _module_loader = module_loader
+
+
+def setup_module_templates(module_loader):
+    """Add module template directories to Jinja2's search path."""
+    from jinja2 import FileSystemLoader, ChoiceLoader
+
+    loaders = [app.jinja_loader]  # keep default loader first
+    for mod in module_loader.get_enabled_modules():
+        tpl_dir = os.path.join(mod.path, "templates")
+        if os.path.isdir(tpl_dir):
+            loaders.append(FileSystemLoader(tpl_dir))
+    if len(loaders) > 1:
+        app.jinja_loader = ChoiceLoader(loaders)
 
 
 def _init_session_key(data_dir):
@@ -130,20 +492,53 @@ def init_config(config_manager, on_config_changed=None):
 
 
 def _auth_required():
-    """Check if auth is enabled and user is not logged in."""
+    """Check if auth is enabled and user is not logged in.
+
+    Also checks for valid Bearer token in Authorization header.
+    Returns True if authentication is required but not provided.
+    """
     if not _config_manager:
         return False
     admin_pw = _config_manager.get("admin_password", "")
     if not admin_pw:
         return False
-    return not session.get("authenticated")
+    if session.get("authenticated"):
+        return False
+    # Check Bearer token
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer ") and _storage:
+        token = auth_header[7:]
+        token_info = _storage.validate_api_token(token)
+        if token_info:
+            request._api_token = token_info
+            return False
+    return True
 
 
 def require_auth(f):
-    """Decorator: redirect to /login if auth is enabled and not logged in."""
+    """Decorator: redirect to /login or return 401 JSON for API paths."""
     @functools.wraps(f)
     def decorated(*args, **kwargs):
         if _auth_required():
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "Authentication required"}), 401
+            return redirect("/login")
+        return f(*args, **kwargs)
+    return decorated
+
+
+def _require_session_auth(f):
+    """Decorator: only allow session-based login, no API tokens."""
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        if not _config_manager or not _config_manager.get("admin_password", ""):
+            return f(*args, **kwargs)
+        if not session.get("authenticated"):
+            # Token auth is not sufficient for this endpoint
+            if getattr(request, "_api_token", None) or request.headers.get("Authorization", "").startswith("Bearer "):
+                return jsonify({"error": "Session authentication required"}), 403
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "Authentication required"}), 401
             return redirect("/login")
         return f(*args, **kwargs)
     return decorated
@@ -158,15 +553,30 @@ def login():
     theme = _config_manager.get_theme() if _config_manager else "dark"
     error = None
     if request.method == "POST":
+        ip = _get_client_ip()
+        wait = _check_login_rate_limit(ip)
+        if wait > 0:
+            audit_log.warning("Login rate-limited: ip=%s (retry in %ds)", ip, int(wait))
+            error = t.get("login_rate_limited", "Too many attempts. Try again later.")
+            return render_template("login.html", t=t, lang=lang, theme=theme, error=error)
         pw = request.form.get("password", "")
         stored = _config_manager.get("admin_password", "")
         if stored.startswith(("scrypt:", "pbkdf2:")):
             success = check_password_hash(stored, pw)
         else:
-            success = (pw == stored)  # legacy plaintext / env var
+            success = (pw == stored)
+            if success:
+                # Auto-upgrade plaintext password to hash
+                _config_manager.save({"admin_password": pw})
+                audit_log.info("Auto-upgraded plaintext password to hash for ip=%s", ip)
         if success:
+            _login_attempts.pop(ip, None)
+            session.permanent = True
             session["authenticated"] = True
+            audit_log.info("Login successful: ip=%s", ip)
             return redirect("/")
+        _record_failed_login(ip)
+        audit_log.warning("Login failed: ip=%s", ip)
         error = t.get("login_failed", "Invalid password")
     return render_template("login.html", t=t, lang=lang, theme=theme, error=error)
 
@@ -179,33 +589,102 @@ def logout():
 
 @app.context_processor
 def inject_auth():
-    """Make auth_enabled available in all templates."""
+    """Make auth_enabled and module info available in all templates."""
     auth_enabled = bool(_config_manager and _config_manager.get("admin_password", ""))
-    return {"auth_enabled": auth_enabled, "version": APP_VERSION}
+    modules = _module_loader.get_enabled_modules() if _module_loader else []
+
+    # Resolve active theme module's CSS variables
+    active_theme_data = None
+    active_theme_id = ""
+    if _module_loader and _config_manager:
+        active_id = _config_manager.get("active_theme", "")
+        theme_modules = _module_loader.get_theme_modules()
+        active_mod = None
+        first_with_data = None
+        for m in theme_modules:
+            if m.theme_data:
+                if first_with_data is None:
+                    first_with_data = m
+                if m.id == active_id:
+                    active_mod = m
+                    break
+        if active_mod is None:
+            active_mod = first_with_data  # fallback to first available
+        if active_mod:
+            active_theme_data = active_mod.theme_data
+            active_theme_id = active_mod.id
+
+    # All themes with loaded data (enabled + disabled) for settings gallery
+    all_theme_modules = [
+        m for m in (_module_loader.get_theme_modules() if _module_loader else [])
+        if m.theme_data
+    ]
+    theme_collections = _build_theme_collections(all_theme_modules)
+
+    return {
+        "auth_enabled": auth_enabled,
+        "version": APP_VERSION,
+        "update_available": _check_for_update(),
+        "modules": modules,
+        "all_theme_modules": all_theme_modules,
+        "theme_collections": theme_collections,
+        "active_theme_data": active_theme_data,
+        "active_theme_id": active_theme_id,
+    }
 
 
-def update_state(analysis=None, error=None, poll_interval=None, connection_info=None, device_info=None, speedtest_latest=None):
-    """Update the shared web state from the main loop."""
-    if analysis is not None:
-        _state["analysis"] = analysis
-        _state["last_update"] = time.strftime("%Y-%m-%d %H:%M:%S")
+def update_state(analysis=None, error=None, poll_interval=None, connection_info=None, device_info=None, speedtest_latest=None, weather_latest=None):
+    """Update the shared web state from the main loop (thread-safe)."""
+    with _state_lock:
+        if analysis is not None:
+            _state["analysis"] = analysis
+            _state["last_update"] = time.strftime("%Y-%m-%d %H:%M:%S")
+            _state["error"] = None
+        if error is not None:
+            _state["error"] = str(error)
+        if poll_interval is not None:
+            _state["poll_interval"] = poll_interval
+        if connection_info is not None:
+            _state["connection_info"] = connection_info
+        if device_info is not None:
+            _state["device_info"] = device_info
+        if speedtest_latest is not None:
+            _state["speedtest_latest"] = speedtest_latest
+        if weather_latest is not None:
+            _state["weather_latest"] = weather_latest
+
+
+def get_state() -> dict:
+    """Return a snapshot of the shared web state (thread-safe)."""
+    with _state_lock:
+        return dict(_state)
+
+
+def reset_modem_state():
+    """Clear modem-specific dashboard state before switching drivers.
+
+    Keeps unrelated collector data like speedtest/weather cache intact so
+    the dashboard only drops the modem-derived sections while a new poll
+    is starting.
+    """
+    with _state_lock:
+        _state["analysis"] = None
+        _state["last_update"] = None
         _state["error"] = None
-    if error is not None:
-        _state["error"] = str(error)
-    if poll_interval is not None:
-        _state["poll_interval"] = poll_interval
-    if connection_info is not None:
-        _state["connection_info"] = connection_info
-    if device_info is not None:
-        _state["device_info"] = device_info
-    if speedtest_latest is not None:
-        _state["speedtest_latest"] = speedtest_latest
+        _state["connection_info"] = None
+        _state["device_info"] = None
+
+
+@app.route("/sw.js")
+def service_worker():
+    return send_from_directory(app.static_folder, "sw.js", mimetype="application/javascript")
 
 
 @app.route("/")
 @require_auth
 def index():
-    if _config_manager and not _config_manager.is_configured():
+    demo_mode = _config_manager.is_demo_mode() if _config_manager else False
+    if _config_manager and not demo_mode and not _config_manager.is_configured():
         return redirect("/setup")
 
     theme = _config_manager.get_theme() if _config_manager else "dark"
@@ -213,11 +692,37 @@ def index():
     t = get_translations(lang)
 
     isp_name = _config_manager.get("isp_name", "") if _config_manager else ""
+    if demo_mode and not isp_name:
+        isp_name = "Vodafone Kabel"
     bqm_configured = _config_manager.is_bqm_configured() if _config_manager else False
+    smokeping_configured = _config_manager.is_smokeping_configured() if _config_manager else False
     speedtest_configured = _config_manager.is_speedtest_configured() if _config_manager else False
-    speedtest_latest = _state.get("speedtest_latest")
-    conn_info = _state.get("connection_info") or {}
-    dev_info = _state.get("device_info") or {}
+    gaming_quality_enabled = _config_manager.is_gaming_quality_enabled() if _config_manager else False
+    segment_utilization_enabled = _config_manager.is_segment_utilization_enabled() if _config_manager else False
+    is_fritzbox = (_config_manager.get("modem_type") == "fritzbox") if _config_manager else False
+    bnetz_enabled = _config_manager.is_bnetz_enabled() if _config_manager else True
+    state = get_state()
+    speedtest_latest = state.get("speedtest_latest")
+    booked_download = _config_manager.get("booked_download", 0) if _config_manager else 0
+    booked_upload = _config_manager.get("booked_upload", 0) if _config_manager else 0
+    conn_info = state.get("connection_info") or {}
+    # Demo mode: derive booked speeds from connection info if not explicitly set
+    if demo_mode:
+        if not booked_download:
+            booked_download = conn_info.get("max_downstream_kbps", 250000) // 1000
+        if not booked_upload:
+            booked_upload = conn_info.get("max_upstream_kbps", 40000) // 1000
+    dev_info = state.get("device_info") or {}
+    analysis = state["analysis"]
+    gaming_index = compute_gaming_index(analysis, speedtest_latest) if gaming_quality_enabled else None
+    bnetz_latest = None
+    if _storage and bnetz_enabled:
+        try:
+            from app.modules.bnetz.storage import BnetzStorage
+            _bs = BnetzStorage(_storage.db_path)
+            bnetz_latest = _bs.get_latest_bnetz()
+        except (ImportError, Exception):
+            pass
 
     def _compute_uncorr_pct(analysis):
         """Compute log-scale percentage for uncorrectable errors gauge."""
@@ -235,59 +740,55 @@ def index():
                 return True
         return False
 
-    ts = request.args.get("t")
-    if ts and not _TS_RE.match(ts):
-        return redirect("/")
-    if ts and _storage:
-        snapshot = _storage.get_snapshot(ts)
-        if snapshot:
-            return render_template(
-                "index.html",
-                analysis=snapshot,
-                last_update=ts.replace("T", " "),
-                poll_interval=_state["poll_interval"],
-                error=None,
-                historical=True,
-                snapshot_ts=ts,
-                theme=theme,
-                isp_name=isp_name, connection_info=conn_info,
-                bqm_configured=bqm_configured,
-                speedtest_configured=speedtest_configured,
-                speedtest_latest=speedtest_latest,
-                uncorr_pct=_compute_uncorr_pct(snapshot),
-                has_us_ofdma=_has_us_ofdma(snapshot),
-                device_info=dev_info,
-                t=t, lang=lang, languages=LANGUAGES, lang_flags=LANG_FLAGS,
-            )
     return render_template(
         "index.html",
-        analysis=_state["analysis"],
-        last_update=_state["last_update"],
-        poll_interval=_state["poll_interval"],
-        error=_state["error"],
-        historical=False,
-        snapshot_ts=None,
+        analysis=analysis,
+        last_update=state["last_update"],
+        poll_interval=state["poll_interval"],
+        error=state["error"],
         theme=theme,
         isp_name=isp_name, connection_info=conn_info,
         bqm_configured=bqm_configured,
+        smokeping_configured=smokeping_configured,
         speedtest_configured=speedtest_configured,
         speedtest_latest=speedtest_latest,
-        uncorr_pct=_compute_uncorr_pct(_state["analysis"]),
-        has_us_ofdma=_has_us_ofdma(_state["analysis"]),
+        booked_download=booked_download,
+        booked_upload=booked_upload,
+        uncorr_pct=_compute_uncorr_pct(analysis),
+        has_us_ofdma=_has_us_ofdma(analysis),
         device_info=dev_info,
+        demo_mode=demo_mode,
+        gaming_quality_enabled=gaming_quality_enabled,
+        segment_utilization_enabled=segment_utilization_enabled,
+        gaming_index=gaming_index,
+        is_fritzbox=is_fritzbox,
+        bnetz_enabled=bnetz_enabled,
+        bnetz_latest=bnetz_latest,
         t=t, lang=lang, languages=LANGUAGES, lang_flags=LANG_FLAGS,
     )
 
 
+@app.route("/health")
+def health():
+    """Simple health check endpoint."""
+    if _state["analysis"]:
+        return {"status": "ok", "docsis_health": _state["analysis"]["summary"]["health"], "version": APP_VERSION}
+    return {"status": "ok", "docsis_health": "waiting", "version": APP_VERSION}
+
+
 @app.route("/setup")
 def setup():
-    if _config_manager and _config_manager.is_configured():
+    if _config_manager and (_config_manager.is_configured() or _config_manager.is_demo_mode()):
         return redirect("/")
     config = _config_manager.get_all(mask_secrets=True) if _config_manager else {}
     lang = _get_lang()
     t = get_translations(lang)
     tz_name, tz_offset = _server_tz_info()
-    return render_template("setup.html", config=config, poll_min=POLL_MIN, poll_max=POLL_MAX, t=t, lang=lang, languages=LANGUAGES, lang_flags=LANG_FLAGS, server_tz=tz_name, server_tz_offset=tz_offset)
+    from .drivers import driver_registry
+    modem_types = driver_registry.get_available_drivers()
+    driver_hints = driver_registry.get_driver_hints()
+    iana_tz = _guess_iana_timezone()
+    return render_template("setup.html", config=config, poll_min=POLL_MIN, poll_max=POLL_MAX, t=t, lang=lang, languages=LANGUAGES, lang_flags=LANG_FLAGS, server_tz=tz_name, server_tz_offset=tz_offset, modem_types=modem_types, driver_hints=driver_hints, timezones=_get_iana_timezones(), iana_tz=iana_tz)
 
 
 @app.route("/settings")
@@ -298,328 +799,53 @@ def settings():
     lang = _get_lang()
     t = get_translations(lang)
     tz_name, tz_offset = _server_tz_info()
-    return render_template("settings.html", config=config, theme=theme, poll_min=POLL_MIN, poll_max=POLL_MAX, t=t, lang=lang, languages=LANGUAGES, lang_flags=LANG_FLAGS, server_tz=tz_name, server_tz_offset=tz_offset)
-
-
-@app.route("/api/config", methods=["POST"])
-@require_auth
-def api_config():
-    """Save configuration."""
-    if not _config_manager:
-        return jsonify({"success": False, "error": "Config not initialized"}), 500
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"success": False, "error": "No data"}), 400
-        # Clamp poll_interval to allowed range
-        if "poll_interval" in data:
-            try:
-                pi = int(data["poll_interval"])
-                data["poll_interval"] = max(POLL_MIN, min(POLL_MAX, pi))
-            except (ValueError, TypeError):
-                pass
-        _config_manager.save(data)
-        if _on_config_changed:
-            _on_config_changed()
-        return jsonify({"success": True})
-    except Exception as e:
-        log.error("Config save failed: %s", e)
-        return jsonify({"success": False, "error": str(e)}), 500
-
-
-@app.route("/api/test-modem", methods=["POST"])
-@app.route("/api/test-fritz", methods=["POST"])  # deprecated alias
-@require_auth
-def api_test_modem():
-    """Test modem connection."""
-    try:
-        data = request.get_json()
-        # Resolve masked passwords to real values
-        password = data.get("modem_password", "")
-        if password == PASSWORD_MASK and _config_manager:
-            password = _config_manager.get("modem_password", "")
-        from . import fritzbox
-        sid = fritzbox.login(
-            data.get("modem_url", "http://192.168.178.1"),
-            data.get("modem_user", ""),
-            password,
-        )
-        info = fritzbox.get_device_info(data.get("modem_url"), sid)
-        return jsonify({"success": True, "model": info.get("model", "OK")})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-
-@app.route("/api/test-mqtt", methods=["POST"])
-@require_auth
-def api_test_mqtt():
-    """Test MQTT broker connection."""
-    try:
-        data = request.get_json()
-        # Resolve masked passwords to real values
-        pw = data.get("mqtt_password", "") or None
-        if pw == PASSWORD_MASK and _config_manager:
-            pw = _config_manager.get("mqtt_password", "") or None
-        import paho.mqtt.client as mqtt
-        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="docsis-test")
-        user = data.get("mqtt_user", "") or None
-        if user:
-            client.username_pw_set(user, pw)
-        port = int(data.get("mqtt_port", 1883))
-        client.connect(data.get("mqtt_host", "localhost"), port, 5)
-        client.disconnect()
-        return jsonify({"success": True})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-
-@app.route("/api/poll", methods=["POST"])
-@require_auth
-def api_poll():
-    """Trigger an immediate FritzBox poll and return fresh analysis."""
-    global _last_manual_poll
-    if not _config_manager:
-        return jsonify({"success": False, "error": "Not configured"}), 500
-
-    now = time.time()
-    if now - _last_manual_poll < 10:
-        lang = _get_lang()
-        t = get_translations(lang)
-        return jsonify({"success": False, "error": t.get("refresh_rate_limit", "Rate limited")}), 429
-
-    try:
-        from . import fritzbox, analyzer
-        config = _config_manager.get_all()
-        sid = fritzbox.login(
-            config["modem_url"], config["modem_user"], config["modem_password"],
-        )
-        data = fritzbox.get_docsis_data(config["modem_url"], sid)
-        analysis = analyzer.analyze(data)
-        update_state(analysis=analysis)
-        if _storage:
-            _storage.save_snapshot(analysis)
-        _last_manual_poll = time.time()
-        return jsonify({"success": True, "analysis": analysis})
-    except Exception as e:
-        log.error("Manual poll failed: %s", e)
-        return jsonify({"success": False, "error": str(e)}), 500
-
-
-@app.route("/api/calendar")
-@require_auth
-def api_calendar():
-    """Return dates that have snapshot data."""
-    if _storage:
-        return jsonify(_storage.get_dates_with_data())
-    return jsonify([])
-
-
-@app.route("/api/snapshot/daily")
-@require_auth
-def api_snapshot_daily():
-    """Return the daily snapshot closest to the configured snapshot_time."""
-    date = request.args.get("date")
-    if not date or not _storage:
-        return jsonify(None)
-    if not _DATE_RE.match(date):
-        return jsonify({"error": "Invalid date format"}), 400
-    target_time = _config_manager.get("snapshot_time", "06:00") if _config_manager else "06:00"
-    snap = _storage.get_daily_snapshot(date, target_time)
-    return jsonify(snap)
-
-
-@app.route("/api/trends")
-@require_auth
-def api_trends():
-    """Return trend data for a date range.
-    ?range=day|week|month&date=YYYY-MM-DD (date defaults to today)."""
-    if not _storage:
-        return jsonify([])
-    range_type = request.args.get("range", "day")
-    date_str = request.args.get("date", datetime.now().strftime("%Y-%m-%d"))
-    target_time = _config_manager.get("snapshot_time", "06:00") if _config_manager else "06:00"
-
-    try:
-        ref_date = datetime.strptime(date_str, "%Y-%m-%d")
-    except ValueError:
-        return jsonify({"error": "Invalid date format"}), 400
-
-    if range_type == "day":
-        # All snapshots for a single day (intraday)
-        return jsonify(_storage.get_intraday_data(date_str))
-    elif range_type == "week":
-        start = (ref_date - timedelta(days=ref_date.weekday())).strftime("%Y-%m-%d")
-        end = (ref_date + timedelta(days=6 - ref_date.weekday())).strftime("%Y-%m-%d")
-        return jsonify(_storage.get_trend_data(start, end, target_time))
-    elif range_type == "month":
-        start = ref_date.replace(day=1).strftime("%Y-%m-%d")
-        if ref_date.month == 12:
-            end = ref_date.replace(year=ref_date.year + 1, month=1, day=1) - timedelta(days=1)
-        else:
-            end = ref_date.replace(month=ref_date.month + 1, day=1) - timedelta(days=1)
-        return jsonify(_storage.get_trend_data(start, end.strftime("%Y-%m-%d"), target_time))
-    else:
-        return jsonify({"error": "Invalid range (use day, week, month)"}), 400
-
-
-@app.route("/api/export")
-@require_auth
-def api_export():
-    """Generate a structured markdown report for LLM analysis."""
-    analysis = _state.get("analysis")
-    if not analysis:
-        return jsonify({"error": "No data available"}), 404
-
-    s = analysis["summary"]
-    ds = analysis["ds_channels"]
-    us = analysis["us_channels"]
-    ts = _state.get("last_update", "unknown")
-
-    isp = _config_manager.get("isp_name", "") if _config_manager else ""
-    conn = _state.get("connection_info") or {}
-    ds_mbps = conn.get("max_downstream_kbps", 0) // 1000 if conn else 0
-    us_mbps = conn.get("max_upstream_kbps", 0) // 1000 if conn else 0
-
-    lines = [
-        "# DOCSight – DOCSIS Cable Connection Status Report",
-        "",
-        "## Context",
-        "This is a status report from a DOCSIS cable modem generated by DOCSight.",
-        "DOCSIS (Data Over Cable Service Interface Specification) is the standard for internet over coaxial cable.",
-        "Analyze this data and provide insights about connection health, problematic channels, and recommendations.",
-        "",
-        "## Overview",
-        f"- **ISP**: {isp}" if isp else None,
-        f"- **Tariff**: {ds_mbps}/{us_mbps} Mbit/s (Down/Up)" if ds_mbps else None,
-        f"- **Health**: {s.get('health', 'Unknown')}",
-        f"- **Issues**: {', '.join(s.get('health_issues', []))}" if s.get('health_issues') else None,
-        f"- **Timestamp**: {ts}",
-        "",
-        "## Summary",
-        "| Metric | Value |",
-        "|--------|-------|",
-        f"| Downstream Channels | {s.get('ds_total', 0)} |",
-        f"| DS Power (Min/Avg/Max) | {s.get('ds_power_min')} / {s.get('ds_power_avg')} / {s.get('ds_power_max')} dBmV |",
-        f"| DS SNR (Min/Avg) | {s.get('ds_snr_min')} / {s.get('ds_snr_avg')} dB |",
-        f"| DS Correctable Errors | {s.get('ds_correctable_errors', 0):,} |",
-        f"| DS Uncorrectable Errors | {s.get('ds_uncorrectable_errors', 0):,} |",
-        f"| Upstream Channels | {s.get('us_total', 0)} |",
-        f"| US Power (Min/Avg/Max) | {s.get('us_power_min')} / {s.get('us_power_avg')} / {s.get('us_power_max')} dBmV |",
-        "",
-        "## Downstream Channels",
-        "| Ch | Frequency | Power (dBmV) | SNR (dB) | Modulation | Corr. Errors | Uncorr. Errors | DOCSIS | Health |",
-        "|----|-----------|-------------|----------|------------|-------------|---------------|--------|--------|",
+    from .drivers import driver_registry
+    modem_types = driver_registry.get_available_drivers()
+    driver_hints = driver_registry.get_driver_hints()
+    demo_mode = _config_manager.is_demo_mode() if _config_manager else False
+    iana_tz = _guess_iana_timezone()
+    # Warn if server TZ looks like a POSIX abbreviation (no DST support)
+    tz_is_posix = bool(tz_name) and "/" not in tz_name and tz_name not in ("UTC",)
+    all_modules = _module_loader.get_modules() if _module_loader else []
+    is_fritzbox = config.get("modem_type") == "fritzbox"
+    gaming_quality_enabled = _config_manager.is_gaming_quality_enabled() if _config_manager else False
+    segment_utilization_enabled = _config_manager.is_segment_utilization_enabled() if _config_manager else False
+    built_in_features = [
+        {
+            "id": "core.gaming_quality",
+            "name": t.get("gaming_quality_label", "Gaming Quality Index"),
+            "description": t.get(
+                "gaming_quality_hint",
+                "Show a gaming quality badge in the dashboard hero card based on latency, jitter, and signal health.",
+            ),
+            "icon": "gamepad-2",
+            "status_label": t.get("modules_enabled" if gaming_quality_enabled else "modules_disabled", "Enabled" if gaming_quality_enabled else "Disabled"),
+            "status_class": "badge-success" if gaming_quality_enabled else "badge-muted",
+            "manage_section": "system",
+            "manage_label": t.get("system", "System"),
+        },
+        {
+            "id": "core.segment_utilization",
+            "name": t.get("seg_title", "Segment Utilization"),
+            "description": t.get(
+                "seg_subtitle",
+                "Cable segment utilization from FRITZ!Box monitoring. Requires FRITZ!OS 8.20 or newer on supported cable firmware.",
+            ),
+            "icon": "gauge",
+            "status_label": (
+                t.get("modules_requires_fritzbox", "Requires FRITZ!Box")
+                if not is_fritzbox else
+                t.get(
+                    "modules_enabled" if segment_utilization_enabled else "modules_disabled",
+                    "Enabled" if segment_utilization_enabled else "Disabled",
+                )
+            ),
+            "status_class": "badge-warning" if not is_fritzbox else ("badge-success" if segment_utilization_enabled else "badge-muted"),
+            "manage_section": "connection",
+            "manage_label": t.get("step_modem", "Modem"),
+        },
     ]
-    for ch in ds:
-        lines.append(
-            f"| {ch.get('channel_id','')} | {ch.get('frequency','')} | {ch.get('power','')} "
-            f"| {ch.get('snr', '-')} | {ch.get('modulation','')} "
-            f"| {ch.get('correctable_errors', 0):,} | {ch.get('uncorrectable_errors', 0):,} "
-            f"| {ch.get('docsis_version','')} | {ch.get('health','')} |"
-        )
-    lines += [
-        "",
-        "## Upstream Channels",
-        "| Ch | Frequency | Power (dBmV) | Modulation | Multiplex | DOCSIS | Health |",
-        "|----|-----------|-------------|------------|-----------|--------|--------|",
-    ]
-    for ch in us:
-        lines.append(
-            f"| {ch.get('channel_id','')} | {ch.get('frequency','')} | {ch.get('power','')} "
-            f"| {ch.get('modulation','')} | {ch.get('multiplex','')} "
-            f"| {ch.get('docsis_version','')} | {ch.get('health','')} |"
-        )
-    lines += [
-        "",
-        "## Reference Values",
-        "| Metric | Good | Marginal | Poor |",
-        "|--------|------|----------|------|",
-        "| DS Power | -7 to +7 dBmV | +/-7 to +/-10 | > +/-10 dBmV |",
-        "| US Power | 35 to 49 dBmV | 50 to 54 | > 54 dBmV |",
-        "| SNR/MER | > 30 dB | 25 to 30 | < 25 dB |",
-        "| Uncorr. Errors | low | - | > 10,000 |",
-        "",
-        "## Questions",
-        "Please analyze this data and provide:",
-        "1. Overall connection health assessment",
-        "2. Channels that need attention (with reasons)",
-        "3. Error rate analysis and whether it indicates a problem",
-        "4. Specific recommendations to improve connection quality",
-    ]
-    return jsonify({"text": "\n".join(l for l in lines if l is not None)})
-
-
-@app.route("/api/snapshots")
-@require_auth
-def api_snapshots():
-    """Return list of available snapshot timestamps."""
-    if _storage:
-        return jsonify(_storage.get_snapshot_list())
-    return jsonify([])
-
-
-@app.route("/api/bqm/dates")
-@require_auth
-def api_bqm_dates():
-    """Return dates that have BQM graph data."""
-    if _storage:
-        return jsonify(_storage.get_bqm_dates())
-    return jsonify([])
-
-
-@app.route("/api/bqm/image/<date>")
-@require_auth
-def api_bqm_image(date):
-    """Return BQM graph PNG for a given date."""
-    if not _DATE_RE.match(date):
-        return jsonify({"error": "Invalid date format"}), 400
-    if not _storage:
-        return jsonify({"error": "No storage"}), 404
-    image = _storage.get_bqm_graph(date)
-    if not image:
-        return jsonify({"error": "No BQM graph for this date"}), 404
-    resp = make_response(image)
-    resp.headers["Content-Type"] = "image/png"
-    resp.headers["Cache-Control"] = "public, max-age=86400"
-    return resp
-
-
-@app.route("/api/speedtest")
-@require_auth
-def api_speedtest():
-    """Return speedtest results from local cache, with delta fetch from STT."""
-    if not _config_manager or not _config_manager.is_speedtest_configured():
-        return jsonify([])
-    count = request.args.get("count", 2000, type=int)
-    count = max(1, min(count, 5000))
-    # Delta fetch: get new results from STT API and cache them
-    if _storage:
-        try:
-            from .speedtest import SpeedtestClient
-            client = SpeedtestClient(
-                _config_manager.get("speedtest_tracker_url"),
-                _config_manager.get("speedtest_tracker_token"),
-            )
-            cached_count = _storage.get_speedtest_count()
-            if cached_count < 50:
-                # Initial or incomplete cache: full fetch (descending)
-                new_results = client.get_results(per_page=2000)
-            else:
-                last_id = _storage.get_latest_speedtest_id()
-                new_results = client.get_newer_than(last_id)
-            if new_results:
-                _storage.save_speedtest_results(new_results)
-                log.info("Cached %d new speedtest results (last_id was %d)", len(new_results), last_id)
-        except Exception as e:
-            log.warning("Speedtest delta fetch failed: %s", e)
-        return jsonify(_storage.get_speedtest_results(limit=count))
-    # Fallback: no storage, fetch directly
-    from .speedtest import SpeedtestClient
-    client = SpeedtestClient(
-        _config_manager.get("speedtest_tracker_url"),
-        _config_manager.get("speedtest_tracker_token"),
-    )
-    return jsonify(client.get_results(per_page=count))
+    return render_template("settings.html", config=config, theme=theme, poll_min=POLL_MIN, poll_max=POLL_MAX, t=t, lang=lang, languages=LANGUAGES, lang_flags=LANG_FLAGS, server_tz=tz_name, server_tz_offset=tz_offset, modem_types=modem_types, driver_hints=driver_hints, demo_mode=demo_mode, timezones=_get_iana_timezones(), iana_tz=iana_tz, tz_is_posix=tz_is_posix, all_modules=all_modules, built_in_features=built_in_features)
 
 
 @app.after_request
@@ -628,89 +854,18 @@ def add_security_headers(response):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    return response
-
-
-@app.route("/api/report")
-@require_auth
-def api_report():
-    """Generate a PDF incident report."""
-    from .report import generate_report
-
-    analysis = _state.get("analysis")
-    if not analysis:
-        return jsonify({"error": "No data available"}), 404
-
-    # Time range: default last 7 days, configurable via ?days=N
-    days = request.args.get("days", 7, type=int)
-    days = max(1, min(days, 90))
-    end_ts = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-    start_ts = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")
-
-    snapshots = []
-    if _storage:
-        snapshots = _storage.get_range_data(start_ts, end_ts)
-
-    config = {}
-    if _config_manager:
-        config = {
-            "isp_name": _config_manager.get("isp_name", ""),
-            "modem_type": _config_manager.get("modem_type", ""),
-        }
-
-    conn_info = _state.get("connection_info") or {}
-    lang = _get_lang()
-
-    pdf_bytes = generate_report(snapshots, analysis, config, conn_info, lang)
-
-    response = make_response(pdf_bytes)
-    response.headers["Content-Type"] = "application/pdf"
-    ts = datetime.now().strftime("%Y%m%d_%H%M")
-    response.headers["Content-Disposition"] = f'attachment; filename="docsight_incident_report_{ts}.pdf"'
-    return response
-
-
-@app.route("/api/complaint")
-@require_auth
-def api_complaint():
-    """Generate ISP complaint letter as text."""
-    from .report import generate_complaint_text
-
-    analysis = _state.get("analysis")
-    if not analysis:
-        return jsonify({"error": "No data available"}), 404
-
-    days = request.args.get("days", 7, type=int)
-    days = max(1, min(days, 90))
-    end_ts = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-    start_ts = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")
-
-    snapshots = []
-    if _storage:
-        snapshots = _storage.get_range_data(start_ts, end_ts)
-
-    config = {}
-    if _config_manager:
-        config = {
-            "isp_name": _config_manager.get("isp_name", ""),
-            "modem_type": _config_manager.get("modem_type", ""),
-        }
-
-    lang = request.args.get("lang", _get_lang())
-    customer_name = request.args.get("name", "")
-    customer_number = request.args.get("number", "")
-    customer_address = request.args.get("address", "")
-
-    text = generate_complaint_text(
-        snapshots, config, None, lang,
-        customer_name, customer_number, customer_address
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data: blob: https:; "
+        "connect-src 'self'"
     )
-    return jsonify({"text": text, "lang": lang})
+    return response
 
 
-@app.route("/health")
-def health():
-    """Simple health check endpoint."""
-    if _state["analysis"]:
-        return {"status": "ok", "docsis_health": _state["analysis"]["summary"]["health"]}
-    return {"status": "waiting"}, 503
+# ── Blueprint Registration ──
+from .blueprints import register_blueprints
+register_blueprints(app)

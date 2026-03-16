@@ -23,6 +23,7 @@ class SpeedtestClient:
         """Extract relevant fields from a single API result object."""
         data = item.get("data") or {}
         ping_obj = data.get("ping") or {}
+        server = data.get("server") or {}
         return {
             "id": item.get("id"),
             "timestamp": data.get("timestamp") or item.get("created_at", ""),
@@ -33,6 +34,8 @@ class SpeedtestClient:
             "ping_ms": round(float(item.get("ping", 0)), 2),
             "jitter_ms": round(float(ping_obj.get("jitter", 0)), 2),
             "packet_loss_pct": round(float(data.get("packetLoss") or 0), 2),
+            "server_id": server.get("id"),
+            "server_name": server.get("name", ""),
         }
 
     def get_latest(self, count=1):
@@ -82,18 +85,19 @@ class SpeedtestClient:
             return all_results
 
     def get_newer_than(self, last_id, per_page=500):
-        """Fetch results with id > last_id, oldest first. Paginates until done."""
+        """Fetch results with id > last_id. Sorts newest-first and stops at last_id."""
         all_results = []
         page = 1
+        done = False
         try:
-            while True:
+            while not done:
                 batch = min(per_page - len(all_results), 500) if per_page else 500
                 resp = self.session.get(
                     self.base_url + "/api/v1/results",
                     params={
                         "page[size]": batch,
                         "page[number]": page,
-                        "sort": "created_at",
+                        "sort": "-created_at",
                     },
                     timeout=30,
                 )
@@ -105,17 +109,17 @@ class SpeedtestClient:
                 for item in items:
                     if item.get("id", 0) > last_id:
                         all_results.append(self._parse_result(item))
-                # If the first item on this page had id <= last_id but
-                # some were newer, there may be more on the next page.
-                # If all items on this page were old, we can stop.
-                if all(item.get("id", 0) <= last_id for item in items):
-                    break
+                    else:
+                        done = True
+                        break
                 meta = body.get("meta", {})
                 if page >= meta.get("last_page", 1):
                     break
                 if per_page and len(all_results) >= per_page:
                     break
                 page += 1
+            # Return in chronological order (oldest first)
+            all_results.reverse()
             return all_results
         except Exception as e:
             log.warning("Failed to fetch newer speedtest results: %s", e)
