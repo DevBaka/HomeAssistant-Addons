@@ -1,7 +1,7 @@
 {
-  "name": "DOCSight",
+  "name": "DOCSight Monitor",
   "version": "1.0.0",
-  "slug": "docsight",
+  "slug": "docsight-monitor",
   "description": "Monitor your cable internet connection 24/7 and collect evidence for ISP complaints",
   "arch": ["amd64"],
   "startup": "application",
