@@ -30,20 +30,81 @@ class WebhookChannel(NotificationChannel):
         self._headers = {"Content-Type": "application/json"}
         if headers:
             self._headers.update(headers)
+        # Detect Discord webhook
+        self._is_discord = "discord.com" in url
 
     def send(self, payload: dict) -> bool:
         try:
-            r = requests.post(
-                self._url,
-                json=payload,
-                headers=self._headers,
-                timeout=10,
-            )
+            # Format payload for Discord if needed
+            if self._is_discord:
+                discord_payload = self._format_discord_payload(payload)
+                r = requests.post(
+                    self._url,
+                    json=discord_payload,
+                    headers=self._headers,
+                    timeout=10,
+                )
+            else:
+                r = requests.post(
+                    self._url,
+                    json=payload,
+                    headers=self._headers,
+                    timeout=10,
+                )
             r.raise_for_status()
             return True
         except Exception as e:
             log.warning("Webhook POST failed (%s): %s", self._url, e)
             return False
+
+    def _format_discord_payload(self, payload: dict) -> dict:
+        """Format payload for Discord webhook format."""
+        severity = payload.get("severity", "info")
+        message = payload.get("message", "")
+        details = payload.get("details", {})
+        event_type = payload.get("event_type", "unknown")
+        
+        # Discord color codes for severity
+        colors = {
+            "info": 0x3498db,      # Blue
+            "warning": 0xf39c12,   # Orange
+            "critical": 0xe74c3c   # Red
+        }
+        color = colors.get(severity, 0x3498db)
+        
+        # Create embed
+        embed = {
+            "title": f"DOCSight Alert: {event_type.replace('_', ' ').title()}",
+            "description": message,
+            "color": color,
+            "timestamp": payload.get("timestamp"),
+            "footer": {"text": "DOCSight Cable Monitor"},
+            "fields": []
+        }
+        
+        # Add details as fields
+        if details:
+            for key, value in details.items():
+                if key != "raw_data":  # Skip raw data to avoid huge messages
+                    embed["fields"].append({
+                        "name": key.replace("_", " ").title(),
+                        "value": str(value),
+                        "inline": True
+                    })
+        
+        # Add severity field
+        embed["fields"].append({
+            "name": "Severity",
+            "value": severity.upper(),
+            "inline": True
+        })
+        
+        return {
+            "content": "",
+            "embeds": [embed],
+            "username": "DOCSight",
+            "avatar_url": "https://github.com/itsDNNS/docsight/raw/main/app/static/img/icon.png"
+        }
 
 
 class NotificationDispatcher:
@@ -137,8 +198,12 @@ class NotificationDispatcher:
             "timestamp": utc_now(),
             "severity": "info",
             "event_type": "test",
-            "message": "DOCSight test notification",
-            "details": {"test": True},
+            "message": "🧪 DOCSight test notification - webhook is working!",
+            "details": {
+                "test": True,
+                "status": "Webhook configuration successful",
+                "timestamp": utc_now()
+            },
         }
         errors = []
         for channel in self._channels:
