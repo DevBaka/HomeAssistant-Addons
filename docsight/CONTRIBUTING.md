@@ -2,7 +2,7 @@
 
 Thanks for your interest in contributing!
 
-## Before You Start blub
+## Before You Start
 
 **Please open an issue first** before working on any new feature or significant change. This lets us discuss the approach and make sure it fits the project architecture. PRs without a prior issue may be closed.
 
