@@ -1,8 +1,11 @@
 FROM python:3.12-slim
 WORKDIR /app
 
-COPY test_main.py .
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app/ ./app/
 
 EXPOSE 8765
 
-CMD ["python", "test_main.py"]
+CMD ["python", "-m", "app.main"]
