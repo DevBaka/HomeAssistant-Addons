@@ -1,76 +1,18 @@
-FROM ghcr.io/hassio-addons/base:19.0.0
+FROM python:3.12-slim
+WORKDIR /app
 
-# Set shell
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Setup base
-ARG LIBRESPOT_VERSION="0.8.0"
-RUN \
-    apk add --no-cache \
-        libssl3=3.5.4-r0 \
-        libcrypto3=3.5.4-r0 \
-    \
-    && apk add --no-cache --virtual .build-dependencies \
-        build-base=0.5-r3 \
-        cargo=1.87.0-r0 \
-        git=2.49.1-r0 \
-        protobuf-dev=29.4-r0 \
-        pulseaudio-dev=17.0-r5 \
-        cmake=3.31.7-r1 \
-        clang19-libclang=19.1.7-r6 \
-        openssl-dev=3.5.4-r0 \
-    \
-    && apk add --no-cache \
-        pulseaudio=17.0-r5 \
-    \
-    && cargo install --force --locked bindgen-cli \
-    && export PATH="$HOME/.cargo/bin:$PATH" \
-    && cargo install \
-        --locked \
-        --no-default-features \
-        --features "native-tls pulseaudio-backend with-libmdns" \
-        --root /usr \
-        --bin librespot \
-        --version "${LIBRESPOT_VERSION}" \
-        --verbose \
-        -- librespot \
-    \
-    && cargo uninstall bindgen-cli \
-    && apk del --no-cache --purge .build-dependencies \
-    && rm -fr \
-        /tmp/* \
-        ~/.cargo \
-        /usr/.crates.toml \
-        /usr/.crates2.json
+# Install Python dependencies (placeholder - Spotify needs different approach)
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy root filesystem
-COPY rootfs /
+# Copy application files
+COPY app/ ./app/
 
-# Build arguments
-ARG BUILD_ARCH
-ARG BUILD_DATE
-ARG BUILD_DESCRIPTION
-ARG BUILD_NAME
-ARG BUILD_REF
-ARG BUILD_REPOSITORY
-ARG BUILD_VERSION
+EXPOSE 4070
 
-# Labels
-LABEL \
-    io.hass.name="${BUILD_NAME}" \
-    io.hass.description="${BUILD_DESCRIPTION}" \
-    io.hass.arch="${BUILD_ARCH}" \
-    io.hass.type="addon" \
-    io.hass.version=${BUILD_VERSION} \
-    maintainer="Franck Nijhof <frenck@addons.community>" \
-    org.opencontainers.image.title="${BUILD_NAME}" \
-    org.opencontainers.image.description="${BUILD_DESCRIPTION}" \
-    org.opencontainers.image.vendor="Home Assistant Community Add-ons" \
-    org.opencontainers.image.authors="Franck Nijhof <frenck@addons.community>" \
-    org.opencontainers.image.licenses="MIT" \
-    org.opencontainers.image.url="https://addons.community" \
-    org.opencontainers.image.source="https://github.com/${BUILD_REPOSITORY}" \
-    org.opencontainers.image.documentation="https://github.com/${BUILD_REPOSITORY}/blob/main/README.md" \
-    org.opencontainers.image.created=${BUILD_DATE} \
-    org.opencontainers.image.revision=${BUILD_REF} \
-    org.opencontainers.image.version=${BUILD_VERSION}
+CMD ["python", "app/main.py"]
