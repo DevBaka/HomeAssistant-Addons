@@ -2,54 +2,21 @@
   "name": "DevBaka Addons",
   "url": "https://github.com/DevBaka/HomeAssistant-Addons",
   "maintainer": "DevBaka",
-  "version": "2024-03-16-05-35",
+  "version": "2024-03-16-05-40",
   "addons": [
     {
-      "name": "DOCSight",
-      "slug": "docsight",
-      "description": "Monitor your cable internet connection 24/7 and collect evidence for ISP complaints",
+      "name": "Test Addon",
+      "slug": "test-addon",
+      "description": "Simple test addon",
       "version": "1.0.0",
       "arch": ["amd64"],
       "startup": "application",
       "boot": "manual",
       "ports": {
-        "8765/tcp": 8765
+        "9999/tcp": 9999
       },
       "options": {},
       "schema": {}
-    },
-    {
-      "name": "Icecast Server",
-      "slug": "icecast",
-      "description": "Icecast2 streaming server for Home Assistant",
-      "version": "1.0.0",
-      "arch": ["aarch64", "armv7", "amd64"],
-      "startup": "services",
-      "boot": "auto",
-      "map": ["config:rw"],
-      "host_network": true,
-      "options": {},
-      "schema": {}
-    },
-    {
-      "name": "Spotify Simple",
-      "slug": "spotify-simple",
-      "description": "Simple Spotify Connect addon for Home Assistant",
-      "version": "1.0.0",
-      "arch": ["amd64"],
-      "startup": "application",
-      "boot": "manual",
-      "ports": {
-        "4070/tcp": 4070
-      },
-      "options": {
-        "name": "Home Assistant",
-        "port": 4070
-      },
-      "schema": {
-        "name": "str",
-        "port": "int"
-      }
     }
   ]
 }
