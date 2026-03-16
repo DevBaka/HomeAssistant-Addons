@@ -33,17 +33,71 @@ class WebhookChannel(NotificationChannel):
 
     def send(self, payload: dict) -> bool:
         try:
-            r = requests.post(
-                self._url,
-                json=payload,
-                headers=self._headers,
-                timeout=10,
-            )
+            # Discord webhook format
+            if "discord.com/api/webhooks" in self._url:
+                discord_payload = self._format_discord_payload(payload)
+                r = requests.post(
+                    self._url,
+                    json=discord_payload,
+                    headers=self._headers,
+                    timeout=10,
+                )
+            else:
+                # Generic webhook format (ntfy, Gotify, etc.)
+                r = requests.post(
+                    self._url,
+                    json=payload,
+                    headers=self._headers,
+                    timeout=10,
+                )
             r.raise_for_status()
             return True
         except Exception as e:
             log.warning("Webhook POST failed (%s): %s", self._url, e)
             return False
+
+    @staticmethod
+    def _format_discord_payload(payload: dict) -> dict:
+        """Format payload for Discord webhook API."""
+        severity_emoji = {
+            "info": "ℹ️",
+            "warning": "⚠️",
+            "critical": "🚨"
+        }
+        
+        severity_color = {
+            "info": 3447003,      # Blue
+            "warning": 16382978,  # Orange  
+            "critical": 15158332  # Red
+        }
+        
+        emoji = severity_emoji.get(payload.get("severity", "info"), "ℹ️")
+        message = payload.get("message", "")
+        event_type = payload.get("event_type", "unknown")
+        details = payload.get("details", {})
+        
+        # Build embed
+        embed = {
+            "title": f"{emoji} DOCSight Alert",
+            "description": message,
+            "color": severity_color.get(payload.get("severity", "info"), 3447003),
+            "fields": [
+                {"name": "Event Type", "value": event_type, "inline": true},
+                {"name": "Severity", "value": payload.get("severity", "info").upper(), "inline": true}
+            ],
+            "timestamp": payload.get("timestamp"),
+            "footer": {"text": "DOCSight Cable Monitor"}
+        }
+        
+        # Add details if present
+        if details:
+            detail_text = "\n".join([f"**{k}**: {v}" for k, v in details.items()])
+            embed["fields"].append({"name": "Details", "value": detail_text, "inline": False})
+        
+        return {
+            "content": f"{emoji} DOCSight {payload.get('severity', 'info').upper()} alert",
+            "embeds": [embed]
+        }
 
 
 class NotificationDispatcher:
