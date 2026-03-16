@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "slug": "docsight",
   "description": "Monitor your cable internet connection 24/7 and collect evidence for ISP complaints",
-  "arch": ["amd64"],
+  "arch": ["amd64", "aarch64", "armv7"],
   "startup": "application",
   "boot": "manual",
   "map": ["config:rw"],
