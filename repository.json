@@ -2,19 +2,32 @@
   "name": "DevBaka Addons",
   "url": "https://github.com/DevBaka/HomeAssistant-Addons",
   "maintainer": "DevBaka",
-  "version": "2024-03-16-05-40",
+  "version": "2024-03-16-17-20",
   "addons": [
     {
-      "name": "Test Addon",
-      "slug": "test-addon",
-      "description": "Simple test addon",
+      "name": "DOCSight",
+      "slug": "docsight",
+      "description": "Monitor your cable internet connection 24/7 and collect evidence for ISP complaints",
       "version": "1.0.0",
       "arch": ["amd64"],
       "startup": "application",
       "boot": "manual",
       "ports": {
-        "9999/tcp": 9999
+        "8765/tcp": 8765
       },
+      "options": {},
+      "schema": {}
+    },
+    {
+      "name": "Icecast Server",
+      "slug": "icecast",
+      "description": "Icecast2 streaming server for Home Assistant",
+      "version": "1.0.0",
+      "arch": ["aarch64", "armv7", "amd64"],
+      "startup": "services",
+      "boot": "auto",
+      "map": ["config:rw"],
+      "host_network": true,
       "options": {},
       "schema": {}
     }
