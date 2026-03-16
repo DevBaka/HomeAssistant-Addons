@@ -1,0 +1,20 @@
+{
+  "name": "Spotify Simple",
+  "version": "1.0.0",
+  "slug": "spotify-simple",
+  "description": "Simple Spotify Connect addon for Home Assistant",
+  "arch": ["amd64"],
+  "startup": "application",
+  "boot": "manual",
+  "ports": {
+    "4070/tcp": 4070
+  },
+  "options": {
+    "name": "Home Assistant",
+    "port": 4070
+  },
+  "schema": {
+    "name": "str",
+    "port": "int"
+  }
+}
