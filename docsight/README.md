@@ -2,7 +2,7 @@
   <img src="docs/docsight-logo-v2.svg" alt="DOCSight" width="128">
 </p>
 
-<h1 align="center">DOCSight</h1>
+<h1 align="center">DOCSigh blubt</h1>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/itsDNNS/docsight" alt="License"></a>
