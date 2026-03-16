@@ -82,8 +82,8 @@ class WebhookChannel(NotificationChannel):
             "description": message,
             "color": severity_color.get(payload.get("severity", "info"), 3447003),
             "fields": [
-                {"name": "Event Type", "value": event_type, "inline": true},
-                {"name": "Severity", "value": payload.get("severity", "info").upper(), "inline": true}
+                {"name": "Event Type", "value": event_type, "inline": True},
+                {"name": "Severity", "value": payload.get("severity", "info").upper(), "inline": True}
             ],
             "timestamp": payload.get("timestamp"),
             "footer": {"text": "DOCSight Cable Monitor"}
