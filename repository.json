@@ -2,7 +2,7 @@
   "name": "DevBaka Addons",
   "url": "https://github.com/DevBaka/HomeAssistant-Addons",
   "maintainer": "DevBaka",
-  "version": "2024-03-16-17-20",
+  "version": "2024-03-16-17-25",
   "addons": [
     {
       "name": "DOCSight",
@@ -15,19 +15,6 @@
       "ports": {
         "8765/tcp": 8765
       },
-      "options": {},
-      "schema": {}
-    },
-    {
-      "name": "Icecast Server",
-      "slug": "icecast",
-      "description": "Icecast2 streaming server for Home Assistant",
-      "version": "1.0.0",
-      "arch": ["aarch64", "armv7", "amd64"],
-      "startup": "services",
-      "boot": "auto",
-      "map": ["config:rw"],
-      "host_network": true,
       "options": {},
       "schema": {}
     }
