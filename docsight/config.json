@@ -6,18 +6,9 @@
   "arch": ["amd64"],
   "startup": "application",
   "boot": "manual",
-  "map": ["config:rw"],
-  "host_network": false,
   "ports": {
     "8765/tcp": 8765
   },
-  "ports_description": {
-    "8765/tcp": "DOCSight web interface"
-  },
-  "options": {
-    "log_level": "info"
-  },
-  "schema": {
-    "log_level": "list(debug|info|warning|error)"
-  }
+  "options": {},
+  "schema": {}
 }

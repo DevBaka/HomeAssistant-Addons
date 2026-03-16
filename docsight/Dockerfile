@@ -13,8 +13,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
 COPY app/ ./app/
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
 
 # Set up version
 RUN echo "${VERSION}" > /app/VERSION
@@ -27,5 +25,4 @@ HEALTHCHECK --interval=60s --timeout=5s --retries=3 \
 EXPOSE 8765
 
 # Start the application
-ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python", "-m", "app.main"]
