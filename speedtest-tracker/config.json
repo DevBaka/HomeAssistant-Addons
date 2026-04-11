@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "slug": "speedtest-tracker",
   "description": "Track internet speed tests over time",
-  "arch": ["aarch64", "armv7", "amd64"],
+  "arch": ["aarch64"],
   "startup": "application",
   "boot": "manual",
   "ports": {

@@ -1,4 +1,4 @@
-FROM debian:bookworm-slim
+FROM arm64v8/debian:bookworm-slim
 
 # Install Python and Flask
 RUN apt-get update && \
