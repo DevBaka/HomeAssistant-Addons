@@ -1,0 +1,27 @@
+// https://aka.ms/devcontainer.json
+{
+	"name": "Speedtest Tracker Dev Environment",
+	"dockerComposeFile": [
+		"../compose.yaml"
+	],
+	"service": "laravel.test",
+	"workspaceFolder": "/var/www/html",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"aaron-bond.better-comments",
+				"austenc.laravel-blade-spacer",
+				"bmewburn.vscode-intelephense-client",
+				"laravel.vscode-laravel",
+				"mikestead.dotenv",
+				"streetsidesoftware.code-spell-checker"
+			],
+			"settings": {}
+		}
+	},
+	"remoteUser": "sail",
+	"postCreateCommand": "composer install && npm install && npm run build && touch database/database.sqlite && php artisan migrate:fresh --force"
+	// "forwardPorts": [],
+	// "runServices": [],
+	// "shutdownAction": "none",
+}

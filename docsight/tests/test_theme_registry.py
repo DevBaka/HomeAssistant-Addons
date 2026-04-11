@@ -4,7 +4,8 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from app.theme_registry import fetch_registry, validate_registry_entry
+from app.theme_registry import fetch_registry
+from app.module_download import validate_registry_entry
 
 
 class TestValidateRegistryEntry:
@@ -26,7 +27,7 @@ class TestValidateRegistryEntry:
 
 
 class TestFetchRegistry:
-    @patch("app.theme_registry.urllib.request.urlopen")
+    @patch("app.module_download.urllib.request.urlopen")
     def test_fetches_and_parses_registry(self, mock_urlopen):
         registry = {
             "version": 1,
@@ -48,12 +49,16 @@ class TestFetchRegistry:
         mock_resp.__exit__ = MagicMock(return_value=False)
         mock_urlopen.return_value = mock_resp
 
-        result = fetch_registry("https://example.com/registry.json")
+        result = fetch_registry("https://raw.githubusercontent.com/user/repo/main/registry.json")
         assert len(result) == 1
         assert result[0]["id"] == "docsight.theme_neon"
 
-    @patch("app.theme_registry.urllib.request.urlopen")
+    @patch("app.module_download.urllib.request.urlopen")
     def test_returns_empty_on_error(self, mock_urlopen):
         mock_urlopen.side_effect = Exception("Network error")
+        result = fetch_registry("https://raw.githubusercontent.com/user/repo/main/registry.json")
+        assert result == []
+
+    def test_rejects_untrusted_url(self):
         result = fetch_registry("https://example.com/registry.json")
         assert result == []

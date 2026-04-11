@@ -8,8 +8,7 @@ __pycache__/
 .idea/
 deploy.sh
 .config_key
-# config.json is needed for Home Assistant addon
-# config.json
+config.json
 
 # Docs (local only, not for public repo)
 docs/*.md
@@ -24,6 +23,10 @@ PHASE-*.md
 QUICK-TEST-*.md
 phase*.png
 mockup*.png
+
+# Virtual environments
+.venv/
+venv/
 
 # Development artifacts
 *.backup*
@@ -45,3 +48,5 @@ tasks/
 # E2E test screenshots (generated, local only)
 tests/e2e/screenshots/
 
+.superpowers/
+.agents/

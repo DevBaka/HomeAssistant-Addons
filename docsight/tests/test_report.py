@@ -90,7 +90,7 @@ def test_format_threshold_table_uses_real_values():
     # Check that values come from thresholds.json, not hardcoded
     ds_256 = [r for r in rows if r["category"] == "DS Power" and r["variant"] == "256QAM"]
     assert len(ds_256) == 1
-    assert "-3.9" in ds_256[0]["good"]
+    assert "-4.0" in ds_256[0]["good"]
     assert "13.0" in ds_256[0]["good"]
     # Upstream modulation thresholds
     us_mod = [r for r in rows if r["category"] == "US Modulation"]
@@ -104,9 +104,9 @@ def test_default_warn_thresholds():
     assert "ds_power" in warn
     assert "us_power" in warn
     assert "snr" in warn
-    # 256QAM tolerated: -5.9 to 18.0
-    assert "-5.9" in warn["ds_power"]
-    assert "18.0" in warn["ds_power"]
+    # 256QAM warning: -6.0 to 15.0
+    assert "-6.0" in warn["ds_power"]
+    assert "15.0" in warn["ds_power"]
     # EuroDOCSIS 3.0 tolerated: 37.1 to 51.0
     assert "37.1" in warn["us_power"]
     assert "51.0" in warn["us_power"]
@@ -140,7 +140,7 @@ def test_generate_report_with_none_channel_values():
 def test_complaint_text_uses_real_thresholds():
     text = generate_complaint_text(MOCK_SNAPSHOTS)
     # Should contain real threshold values from thresholds.json
-    assert "-5.9 to 18.0 dBmV" in text
+    assert "-6.0 to 15.0 dBmV" in text
     assert "37.1 to 51.0 dBmV" in text
     assert ">= 31.0 dB" in text
 
@@ -174,6 +174,48 @@ def test_complaint_text_includes_comparison_evidence():
     assert "Overall verdict: Degraded." in text
     assert "Average DS SNR delta: -2.70 dB." in text
     assert "Uncorrectable error delta: 127." in text
+
+
+def test_complaint_text_localizes_comparison_evidence_in_german():
+    comparison_data = {
+        "period_a": {
+            "from": "2026-03-17T23:00:00Z",
+            "to": "2026-03-18T22:59:00Z",
+            "snapshots": 23,
+            "health_distribution": {"good": 20, "tolerated": 3},
+        },
+        "period_b": {
+            "from": "2026-03-18T23:00:00Z",
+            "to": "2026-03-19T20:11:00Z",
+            "snapshots": 29,
+            "health_distribution": {"good": 29},
+        },
+        "delta": {
+            "ds_power": 0.8,
+            "ds_snr": -1.2,
+            "us_power": -0.4,
+            "uncorr_errors": 11,
+            "verdict": "degraded",
+        },
+    }
+
+    text = generate_complaint_text(
+        MOCK_SNAPSHOTS,
+        lang="de",
+        comparison_data=comparison_data,
+    )
+
+    assert "Vorher/Nachher-Vergleich als Nachweis:" in text
+    assert "Verglichen wurde 2026-03-17 23:00 bis 2026-03-18 22:59 mit 2026-03-18 23:00 bis 2026-03-19 20:11." in text
+    assert "Messpunkte: Zeitraum A 23, Zeitraum B 29." in text
+    assert "Gesamtbewertung: Verschlechtert." in text
+    assert "Dominanter Gesundheitsstatus wechselte von Gut (87%) zu Gut (100%)." in text
+
+
+def test_complaint_text_falls_back_to_english_for_unknown_language():
+    text = generate_complaint_text(MOCK_SNAPSHOTS, lang="zz")
+    assert "Key findings:" in text
+    assert "Worst downstream power:" in text
 
 
 def test_generate_report_accepts_comparison_evidence():

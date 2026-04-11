@@ -546,6 +546,102 @@ class TestFullDataFlow:
         result = driver.get_docsis_data()
         assert len(result["channelDs"]["docsis30"]) == 1
 
+    def test_docsis_retry_on_xmo_session_error(self, driver):
+        """When modem returns HTTP 200 with XMO error (e.g. after manual login
+        invalidates DOCSight's session), driver must re-authenticate and retry."""
+        ds = [{"uid": 1, "ChannelID": 1, "LockStatus": True,
+               "Frequency": 300000000.0, "SNR": 40.0, "PowerLevel": 5.0,
+               "Modulation": "Qam256", "BandWidth": 8000000,
+               "UnerroredCodewords": 0, "CorrectableCodewords": 0,
+               "UncorrectableCodewords": 0, "SymbolRate": 6952}]
+        xmo_error_response = {
+            "reply": {
+                "uid": 0, "id": 1,
+                "error": {"code": 16777242, "description": "XMO_UNKNOWN_PATH_ERR"},
+                "actions": [{
+                    "uid": 1, "id": 0,
+                    "error": {"code": 16777242, "description": "XMO_UNKNOWN_PATH_ERR"},
+                    "callbacks": [],
+                }],
+                "events": [],
+            }
+        }
+        call_count = [0]
+
+        def side_effect(*args, **kwargs):
+            call_count[0] += 1
+            resp = MagicMock()
+            resp.ok = True
+            resp.status_code = 200
+            if call_count[0] == 1:
+                resp.json.return_value = xmo_error_response
+            elif call_count[0] == 2:
+                resp.json.return_value = _login_response()
+            else:
+                resp.json.return_value = _docsis_response(ds, [])
+            return resp
+
+        driver._logged_in = True
+        driver._credential_hash = "fake"
+        driver._session_id = 1
+        driver._server_nonce = "1"
+        driver._session.post = side_effect
+        result = driver.get_docsis_data()
+        assert len(result["channelDs"]["docsis30"]) == 1
+        assert call_count[0] == 3  # error + re-login + successful fetch
+
+    def test_xmo_error_raises_runtime_error(self, driver):
+        """Any non-success XMO error in _raw_post must raise RuntimeError."""
+        xmo_error_response = {
+            "reply": {
+                "uid": 0, "id": 1,
+                "error": {"code": 16777242, "description": "XMO_UNKNOWN_PATH_ERR"},
+                "actions": [],
+                "events": [],
+            }
+        }
+        driver._session.post = _mock_post([xmo_error_response])
+        with pytest.raises(RuntimeError, match="XMO_UNKNOWN_PATH_ERR"):
+            driver._raw_post({"request": {}})
+
+    @patch("app.drivers.sagemcom.time")
+    def test_login_recovers_from_session_error(self, mock_time, driver):
+        """Login must reset session and retry when modem returns XMO_INVALID_SESSION_ERR."""
+        session_error = {
+            "reply": {
+                "uid": 0, "id": 1,
+                "error": {"code": 16777219, "description": "XMO_INVALID_SESSION_ERR"},
+                "actions": [],
+                "events": [],
+            }
+        }
+        call_count = [0]
+
+        def side_effect(*args, **kwargs):
+            call_count[0] += 1
+            resp = MagicMock()
+            resp.ok = True
+            resp.status_code = 200
+            if call_count[0] == 1:
+                resp.json.return_value = session_error
+            else:
+                resp.json.return_value = _login_response()
+            return resp
+
+        with patch.object(driver, "_reset_session", wraps=driver._reset_session) as mock_reset:
+            driver._session.post = side_effect
+            original_raw_post = driver._raw_post
+
+            def patched_raw_post(body):
+                driver._session.post = side_effect
+                return original_raw_post(body)
+
+            driver._raw_post = patched_raw_post
+            driver.login()
+            mock_reset.assert_called_once()
+        assert driver._logged_in is True
+        assert call_count[0] == 2  # session error + successful re-login
+
 
 # -- Connection info --
 
