@@ -1,8 +1,8 @@
 {
-  "name": "Speedtest Tracker",
+  "name": "Simple Speedtest",
   "version": "1.0.0",
-  "slug": "speedtest-tracker",
-  "description": "Track internet speed tests",
+  "slug": "simple-speedtest",
+  "description": "Basic internet speed test",
   "arch": ["aarch64", "armv7", "amd64"],
   "startup": "services",
   "boot": "auto",
