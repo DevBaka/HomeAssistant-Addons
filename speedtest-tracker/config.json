@@ -3,14 +3,35 @@
   "version": "1.0.0",
   "slug": "speedtest-tracker",
   "description": "Track internet speed tests over time",
-  "arch": ["aarch64", "armv7", "amd64"],
+  "arch": ["amd64", "arm64v8"],
   "startup": "services",
   "boot": "auto",
   "map": ["config:rw"],
-  "host_network": true,
   "ports": {
-    "8080/tcp": 8080
+    "80/tcp": 80
   },
-  "options": {},
-  "schema": {}
+  "options": {
+    "PUID": 1000,
+    "PGID": 1000,
+    "TZ": "Etc/UTC",
+    "APP_KEY": "",
+    "APP_URL": "",
+    "DB_CONNECTION": "sqlite",
+    "SPEEDTEST_SCHEDULE": "",
+    "SPEEDTEST_SERVERS": "",
+    "DISPLAY_TIMEZONE": "Etc/UTC",
+    "PRUNE_RESULTS_OLDER_THAN": 0
+  },
+  "schema": {
+    "PUID": "int",
+    "PGID": "int",
+    "TZ": "str",
+    "APP_KEY": "str",
+    "APP_URL": "str",
+    "DB_CONNECTION": "list(sqlite|mysql)",
+    "SPEEDTEST_SCHEDULE": "str",
+    "SPEEDTEST_SERVERS": "str",
+    "DISPLAY_TIMEZONE": "str",
+    "PRUNE_RESULTS_OLDER_THAN": "int"
+  }
 }

@@ -1,28 +1,11 @@
-FROM arm64v8/debian:bookworm-slim
+FROM lscr.io/linuxserver/speedtest-tracker:latest
 
-# Install Python and Flask
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip curl && \
-    rm -rf /var/lib/apt/lists/*
+# Create data directory
+RUN mkdir -p /config
 
-# Install Flask
-RUN pip3 install --no-cache-dir flask
+# Set permissions
+RUN chown -R abc:abc /config
 
-# Create simple app
-RUN echo "from flask import Flask" > app.py && \
-    echo "app = Flask(__name__)" >> app.py && \
-    echo "" >> app.py && \
-    echo "@app.route('/')" >> app.py && \
-    echo "def hello():" >> app.py && \
-    echo "    return 'Speedtest Tracker is running!'" >> app.py && \
-    echo "" >> app.py && \
-    echo "@app.route('/health')" >> app.py && \
-    echo "def health():" >> app.py && \
-    echo "    return 'OK'" >> app.py && \
-    echo "" >> app.py && \
-    echo "if __name__ == '__main__':" >> app.py && \
-    echo "    app.run(host='0.0.0.0', port=8080)" >> app.py
+EXPOSE 80
 
-EXPOSE 8080
-
-CMD ["python3", "app.py"]
+CMD ["/init"]
