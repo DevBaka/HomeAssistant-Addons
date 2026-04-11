@@ -2,7 +2,7 @@
   "name": "Speedtest Tracker",
   "version": "1.0.0",
   "slug": "speedtest-tracker",
-  "description": "Track internet speed tests over time",
+  "description": "Track internet speed tests",
   "arch": ["aarch64", "armv7", "amd64"],
   "startup": "services",
   "boot": "auto",
