@@ -2,7 +2,7 @@
   "name": "DevBaka Addons",
   "url": "https://github.com/DevBaka/HomeAssistant-Addons",
   "maintainer": "DevBaka",
-  "version": "2024-04-11-03-30",
+  "version": "2024-04-11-03-35",
   "addons": [
     {
       "name": "DOCSight",
@@ -36,7 +36,7 @@
     {
       "name": "Speedtest Tracker",
       "slug": "speedtest-tracker",
-      "description": "Track internet speed tests over time",
+      "description": "Track internet speed tests with web interface",
       "version": "1.0.0",
       "arch": ["aarch64", "armv7", "amd64"],
       "startup": "services",
@@ -46,8 +46,12 @@
       "ports": {
         "8080/tcp": 8080
       },
-      "options": {},
-      "schema": {}
+      "options": {
+        "port": 8080
+      },
+      "schema": {
+        "port": "int"
+      }
     }
   ]
 }
