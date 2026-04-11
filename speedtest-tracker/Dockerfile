@@ -1,11 +1,14 @@
-FROM lscr.io/linuxserver/speedtest-tracker:latest
+FROM php:8.2-apache
 
-# Create data directory
-RUN mkdir -p /config
+# Install extensions
+RUN docker-php-ext-install pdo pdo_mysql
+
+# Copy application files
+COPY . /var/www/html
 
 # Set permissions
-RUN chown -R abc:abc /config
+RUN chown -R www-data:www-data /var/www/html
 
 EXPOSE 80
 
-CMD ["/init"]
+CMD ["apache2-foreground"]
