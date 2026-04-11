@@ -1,8 +1,14 @@
-FROM python:3.12-slim
-WORKDIR /app
+FROM arm64v8/debian:bookworm-slim
 
-RUN pip install --no-cache-dir flask
+# Install Python and Flask
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip curl && \
+    rm -rf /var/lib/apt/lists/*
 
+# Install Flask
+RUN pip3 install --no-cache-dir flask
+
+# Create simple app
 RUN echo "from flask import Flask" > app.py && \
     echo "app = Flask(__name__)" >> app.py && \
     echo "" >> app.py && \
@@ -19,4 +25,4 @@ RUN echo "from flask import Flask" > app.py && \
 
 EXPOSE 8765
 
-CMD ["python", "app.py"]
+CMD ["python3", "app.py"]
