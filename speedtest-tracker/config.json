@@ -3,19 +3,14 @@
   "version": "1.0.0",
   "slug": "speedtest-tracker",
   "description": "Track internet speed tests over time",
-  "arch": ["aarch64"],
-  "startup": "application",
-  "boot": "manual",
+  "arch": ["aarch64", "armv7", "amd64"],
+  "startup": "services",
+  "boot": "auto",
+  "map": ["config:rw"],
+  "host_network": true,
   "ports": {
     "8080/tcp": 8080
   },
-  "ports_description": {
-    "8080/tcp": "Speedtest Tracker web interface"
-  },
-  "options": {
-    "port": 8080
-  },
-  "schema": {
-    "port": "int"
-  }
+  "options": {},
+  "schema": {}
 }
