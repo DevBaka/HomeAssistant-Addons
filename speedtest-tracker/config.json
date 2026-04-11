@@ -9,6 +9,13 @@
   "ports": {
     "8080/tcp": 8080
   },
-  "options": {},
-  "schema": {}
+  "ports_description": {
+    "8080/tcp": "Speedtest Tracker web interface"
+  },
+  "options": {
+    "port": 8080
+  },
+  "schema": {
+    "port": "int"
+  }
 }
