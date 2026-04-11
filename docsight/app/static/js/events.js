@@ -9,7 +9,8 @@ var _eventTypeLabels = {
     snr_change: T.event_type_snr_change || 'SNR Change',
     channel_change: T.event_type_channel_change || 'Channel Change',
     modulation_change: T.event_type_modulation_change || 'Modulation Change',
-    error_spike: T.event_type_error_spike || 'Error Spike'
+    error_spike: T.event_type_error_spike || 'Error Spike',
+    smart_capture_triggered: T.event_type_smart_capture_triggered || 'Smart Capture'
 };
 var _sevLabels = {
     info: T.event_severity_info || 'Info',
@@ -21,6 +22,13 @@ var _sevLabels = {
 var _currentSeverityFilter = '';
 var _hideOperational = true;
 var _OPERATIONAL_EVENT_TYPES = { monitoring_started: true, monitoring_stopped: true };
+
+function _eventTypeLabel(eventType) {
+    var explicit = _eventTypeLabels[eventType];
+    if (explicit) return explicit;
+    var i18nKey = 'event_type_' + eventType;
+    return T[i18nKey] || eventType;
+}
 
 /* ── Rich event message formatter ── */
 function _fmtNum(n) {
@@ -104,6 +112,14 @@ function formatEventMessage(ev) {
         case 'monitoring_started':
             return escapeHtml(T.event_monitoring_started_msg || 'Monitoring started') + ' ' + _healthDot(d.health || 'unknown');
 
+        case 'smart_capture_triggered': {
+            var scHtml = '<span>' + escapeHtml(ev.message) + '</span>';
+            if (d && d.source_event) {
+                scHtml += '<span class="ev-sub">' + escapeHtml(d.source_event) + '</span>';
+            }
+            return scHtml;
+        }
+
         default:
             return escapeHtml(ev.message);
     }
@@ -112,18 +128,21 @@ function formatEventMessage(ev) {
 function toggleHideOperational() {
     _hideOperational = !_hideOperational;
     var btn = document.getElementById('hide-operational-btn');
-    if (btn) btn.classList.toggle('active', _hideOperational);
+    if (btn) {
+        btn.classList.toggle('active', _hideOperational);
+        btn.setAttribute('aria-pressed', String(_hideOperational));
+    }
     loadEvents();
 }
 
 function filterEventsBySeverity(severity) {
     _currentSeverityFilter = severity;
-    var pills = document.querySelectorAll('.severity-pill');
+    var pills = document.querySelectorAll('.severity-pill:not(#hide-operational-btn)');
     pills.forEach(function(pill) {
-        if (pill.getAttribute('data-severity') === severity) {
-            pill.classList.add('active');
-        } else {
-            pill.classList.remove('active');
+        var isActive = pill.getAttribute('data-severity') === severity;
+        pill.classList.toggle('active', isActive);
+        if (pill.hasAttribute('aria-pressed')) {
+            pill.setAttribute('aria-pressed', String(isActive));
         }
     });
     loadEvents();
@@ -187,11 +206,11 @@ function loadEvents(append) {
                 var sevLabel = _sevLabels[ev.severity] || ev.severity;
                 var sevIcons = { info: 'info', warning: 'triangle-alert', critical: 'octagon-alert' };
                 var sevIcon = sevIcons[ev.severity] || 'info';
-                var typeLabel = _eventTypeLabels[ev.event_type] || ev.event_type;
+                var typeLabel = _eventTypeLabel(ev.event_type);
                 // Note: escapeHtml is used on all user-facing content to prevent XSS.
                 // The ack button uses a hardcoded event ID (integer) which is safe.
                 var ackBtn = ev.acknowledged
-                    ? '<span style="color:var(--muted);font-size:0.8em;">&#10003;</span>'
+                    ? '<span class="ev-ack-mark">&#10003;</span>'
                     : '<button class="btn-ack" onclick="acknowledgeEvent(' + ev.id + ', event)">&#10003;</button>';
                 tr.innerHTML =
                     '<td style="white-space:nowrap;">' + escapeHtml(ev.timestamp.replace('T', ' ')) + '</td>' +

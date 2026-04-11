@@ -245,14 +245,45 @@ def _valid_date(date_str):
         return True
     except ValueError:
         return False
-_SAFE_HTML_RE = re.compile(r"<(?!/?(?:b|a|strong|em|br)\b)[^>]+>", re.IGNORECASE)
+_STRIP_TAGS_RE = re.compile(r"<(?!/?(?:b|a|strong|em|br)\b)[^>]+>", re.IGNORECASE)
+_CLOSE_TAG_RE = re.compile(r"</(a|b|strong|em|br)\s[^>]*>", re.IGNORECASE)
+_OPEN_TAG_RE = re.compile(r"<(a|b|strong|em|br)([\s/][^>]*)?>", re.IGNORECASE)
+_HREF_VAL_RE = re.compile(r'href\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|(\S+))', re.IGNORECASE)
+_SAFE_HREF_RE = re.compile(r'^(?:https?://|#|/(?!/))[\x20-\x7E]*$', re.IGNORECASE)
+
+
+def _clean_tag(match: re.Match) -> str:
+    """Strip all attributes from allowed tags, except safe href on <a>."""
+    tag_name = match.group(1).lower()
+    attrs = match.group(2) or ""
+
+    if tag_name != "a" or not attrs.strip():
+        return f"<{tag_name}>"
+
+    # Extract and validate href
+    href_match = _HREF_VAL_RE.search(attrs)
+    if not href_match:
+        return "<a>"
+
+    href_val = href_match.group(1) or href_match.group(2) or href_match.group(3) or ""
+    # Strip control characters and HTML entities that could hide javascript:
+    stripped = re.sub(r'[\x00-\x1f]|&#?\w+;', '', href_val)
+    if _SAFE_HREF_RE.match(stripped):
+        return f'<a href="{stripped}">'
+    return '<a href="#">'
 
 
 @app.template_filter("safe_html")
 def safe_html_filter(value):
-    """Allow only <b>, <a>, <strong>, <em>, <br> tags — strip everything else."""
+    """Allow only <b>, <a>, <strong>, <em>, <br> tags — strip everything else.
+
+    On allowed tags, all attributes are removed except href on <a>.
+    href values must match an allowlist (https://, http://, #, /).
+    """
     from markupsafe import Markup
-    cleaned = _SAFE_HTML_RE.sub("", str(value))
+    cleaned = _STRIP_TAGS_RE.sub("", str(value))
+    cleaned = _CLOSE_TAG_RE.sub(lambda m: f"</{m.group(1)}>", cleaned)
+    cleaned = _OPEN_TAG_RE.sub(_clean_tag, cleaned)
     return Markup(cleaned)
 
 
@@ -600,16 +631,19 @@ def inject_auth():
         active_id = _config_manager.get("active_theme", "")
         theme_modules = _module_loader.get_theme_modules()
         active_mod = None
+        classic_mod = None
         first_with_data = None
         for m in theme_modules:
             if m.theme_data:
                 if first_with_data is None:
                     first_with_data = m
+                if m.id == "docsight.theme_classic":
+                    classic_mod = m
                 if m.id == active_id:
                     active_mod = m
                     break
         if active_mod is None:
-            active_mod = first_with_data  # fallback to first available
+            active_mod = classic_mod or first_with_data
         if active_mod:
             active_theme_data = active_mod.theme_data
             active_theme_id = active_mod.id
@@ -654,6 +688,12 @@ def update_state(analysis=None, error=None, poll_interval=None, connection_info=
             _state["weather_latest"] = weather_latest
 
 
+def clear_speedtest_latest():
+    """Clear the cached speedtest_latest from state (e.g. after server reset)."""
+    with _state_lock:
+        _state["speedtest_latest"] = None
+
+
 def get_state() -> dict:
     """Return a snapshot of the shared web state (thread-safe)."""
     with _state_lock:
@@ -694,7 +734,12 @@ def index():
     isp_name = _config_manager.get("isp_name", "") if _config_manager else ""
     if demo_mode and not isp_name:
         isp_name = "Vodafone Kabel"
-    bqm_configured = _config_manager.is_bqm_configured() if _config_manager else False
+    bqm_configured = bool(
+        _config_manager and (
+            _config_manager.is_bqm_configured()
+            or _config_manager.get("bqm_url")
+        )
+    )
     smokeping_configured = _config_manager.is_smokeping_configured() if _config_manager else False
     speedtest_configured = _config_manager.is_speedtest_configured() if _config_manager else False
     gaming_quality_enabled = _config_manager.is_gaming_quality_enabled() if _config_manager else False
@@ -765,6 +810,7 @@ def index():
         bnetz_enabled=bnetz_enabled,
         bnetz_latest=bnetz_latest,
         t=t, lang=lang, languages=LANGUAGES, lang_flags=LANG_FLAGS,
+        temperature_unit=_config_manager.get("temperature_unit", "celsius") if _config_manager else "celsius",
     )
 
 
@@ -788,7 +834,8 @@ def setup():
     modem_types = driver_registry.get_available_drivers()
     driver_hints = driver_registry.get_driver_hints()
     iana_tz = _guess_iana_timezone()
-    return render_template("setup.html", config=config, poll_min=POLL_MIN, poll_max=POLL_MAX, t=t, lang=lang, languages=LANGUAGES, lang_flags=LANG_FLAGS, server_tz=tz_name, server_tz_offset=tz_offset, modem_types=modem_types, driver_hints=driver_hints, timezones=_get_iana_timezones(), iana_tz=iana_tz)
+    theme = _config_manager.get_theme() if _config_manager else "dark"
+    return render_template("setup.html", config=config, poll_min=POLL_MIN, poll_max=POLL_MAX, t=t, lang=lang, languages=LANGUAGES, lang_flags=LANG_FLAGS, server_tz=tz_name, server_tz_offset=tz_offset, modem_types=modem_types, driver_hints=driver_hints, timezones=_get_iana_timezones(), iana_tz=iana_tz, theme=theme)
 
 
 @app.route("/settings")

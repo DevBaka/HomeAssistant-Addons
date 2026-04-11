@@ -1,12 +1,24 @@
 /* views.css — Shared & Core View Styles
    Trends, Events, Correlation, Gaming, Channels */
 
+:root {
+    --corr-color-download: #0ea5e9;
+    --corr-color-upload: #06b6d4;
+    --corr-color-snr: #a855f7;
+    --corr-color-tx-power: #f59e0b;
+    --corr-color-ds-power: #ec4899;
+    --corr-color-errors: rgba(239,68,68,0.6);
+    --corr-color-temperature: #f97316;
+    --corr-color-seg-ds: #0ea5e9;
+    --corr-color-seg-us: #6366f1;
+}
+
 /* ── Shared Utilities ── */
 .sort-indicator { margin-left: 4px; font-size: 0.8em; opacity: 0.7; }
 
 .error-box {
-    background: rgba(244,67,54,0.15); border: 1px solid var(--crit);
-    color: var(--crit); padding: 12px; border-radius: 6px; margin-bottom: 16px;
+    background: var(--crit-muted); border: 1px solid var(--crit);
+    color: var(--crit); padding: 12px; border-radius: var(--radius-sm); margin-bottom: 16px;
 }
 
 .waiting {
@@ -44,7 +56,7 @@
     gap: var(--space-sm, 10px);
 }
 .trend-title {
-    font-size: 1.5em;
+    font-size: clamp(1.2rem, 1rem + 0.5vw, 1.5rem);
     color: var(--accent-purple, var(--accent));
     font-weight: bold;
     display: block;
@@ -70,24 +82,24 @@
     cursor: pointer;
     font-family: inherit;
     font-weight: 500;
-    transition: all 0.2s ease;
+    transition: all 0.2s var(--ease-out-expo);
     border-radius: 20px;
 }
 .trend-tab:hover {
     color: var(--text);
-    background: rgba(168,85,247,0.1);
+    background: var(--amethyst-muted);
 }
 .trend-tab.active {
     background: var(--accent-purple, var(--accent));
-    color: #fff;
+    color: var(--text-on-accent);
     font-weight: 600;
-    box-shadow: 0 2px 8px rgba(168,85,247,0.3);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--amethyst) 30%, transparent);
 }
 .trend-tab.temp-toggle {
     padding: 6px 10px;
     color: var(--text-secondary, var(--muted));
     opacity: 0.6;
-    transition: all 0.2s ease;
+    transition: all 0.2s var(--ease-out-expo);
 }
 .trend-tab.temp-toggle:hover { opacity: 1; background: rgba(249,115,22,0.1); }
 .trend-tab.temp-toggle.active {
@@ -110,12 +122,10 @@
     border-radius: var(--radius-md, 8px);
     padding: var(--space-lg, 20px);
     position: relative;
-    transition: all 0.2s ease;
+    transition: all 0.2s var(--ease-out-expo);
 }
 .chart-card:hover {
     border-color: var(--accent-purple, var(--accent));
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(168,85,247,0.15);
 }
 
 /* Chart header with icon */
@@ -155,7 +165,7 @@
     position: absolute;
     z-index: 100;
     padding: 8px 12px;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     font-size: 12px;
     line-height: 1.5;
     pointer-events: none;
@@ -182,17 +192,17 @@
     font-size: 1.1em;
     cursor: pointer;
     padding: 4px 8px;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     line-height: 1;
     opacity: 0.6;
-    transition: all 0.2s ease;
+    transition: all 0.2s var(--ease-out-expo);
     flex-shrink: 0;
 }
 .chart-expand-btn:hover {
     opacity: 1;
     color: var(--accent-purple, var(--accent));
     border-color: var(--accent-purple, var(--accent));
-    background: rgba(168,85,247,0.1);
+    background: var(--amethyst-muted);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -206,7 +216,7 @@
     gap: var(--space-sm, 10px);
 }
 .events-header .trend-title {
-    font-size: 1.5em;
+    font-size: clamp(1.2rem, 1rem + 0.5vw, 1.5rem);
     color: var(--accent-purple, var(--accent));
     font-weight: bold;
 }
@@ -241,19 +251,21 @@
     cursor: pointer;
     font-family: inherit;
     font-weight: 500;
-    transition: all 0.2s ease;
-    border-radius: 20px;
+    transition: all 0.2s var(--ease-out-expo);
+    border-radius: var(--radius-lg);
     white-space: nowrap;
 }
 .severity-pill:hover {
     color: var(--text);
-    background: rgba(168,85,247,0.1);
+    background: var(--amethyst-muted);
 }
+.severity-pill:active { opacity: 0.8; }
+.severity-pill:focus-visible { outline: 2px solid var(--amethyst); outline-offset: 2px; }
 .severity-pill.active {
     background: var(--accent-purple, var(--accent));
-    color: #fff;
+    color: var(--text-on-accent);
     font-weight: 600;
-    box-shadow: 0 2px 8px rgba(168,85,247,0.3);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--amethyst) 30%, transparent);
 }
 
 /* Phase 4.3: Table card wrapper (shared — used by Events + Correlation) */
@@ -306,10 +318,10 @@
 }
 #events-table tbody tr {
     transition: background 0.15s;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
+    border-bottom: 1px solid var(--border-tint);
 }
 #events-table tbody tr:hover {
-    background: rgba(168,85,247,0.08);
+    background: color-mix(in srgb, var(--amethyst) 8%, transparent);
 }
 #events-table tbody tr.event-acked {
     opacity: 0.5;
@@ -328,16 +340,16 @@
 /* Event message formatting */
 .ev-val { font-family: var(--font-mono, monospace); font-weight: 600; white-space: nowrap; display: inline-block; }
 .ev-arrow-icon { display: inline-block; width: 14px; height: 14px; margin: 0 4px; vertical-align: middle; color: var(--muted); }
-.ev-up { color: var(--color-ok, #22c55e); }
-.ev-down { color: var(--color-crit, #ef4444); }
-.ev-warn { color: var(--color-warn, #f59e0b); }
+.ev-up { color: var(--good); }
+.ev-down { color: var(--crit); }
+.ev-warn { color: var(--warn); }
 .ev-muted { color: var(--muted); font-size: 0.9em; }
 .ev-sub { display: block; margin-top: 2px; padding-left: 12px; font-size: 0.9em; color: var(--muted); }
 .ev-label { color: var(--text-secondary, var(--muted)); margin-right: 6px; white-space: nowrap; display: inline-block; }
 .health-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; margin-right: 4px; }
-.health-dot.good { background: var(--color-ok, #22c55e); }
-.health-dot.marginal { background: var(--color-warn, #f59e0b); }
-.health-dot.poor { background: var(--color-crit, #ef4444); }
+.health-dot.good { background: var(--good); }
+.health-dot.marginal { background: var(--warn); }
+.health-dot.poor { background: var(--crit); }
 .health-dot.unknown { background: var(--muted); }
 
 /* Phase 4.3: Sidebar event badge (purple instead of red) */
@@ -345,7 +357,7 @@
     display: inline-flex; align-items: center; justify-content: center;
     min-width: 18px; height: 18px;
     padding: 0 5px; border-radius: 9px; font-size: 0.7em; font-weight: bold;
-    background: var(--accent-purple, var(--accent)); color: #fff; margin-left: 6px;
+    background: var(--accent-purple, var(--accent)); color: var(--text-on-accent); margin-left: 6px;
 }
 
 /* Phase 4.3: Severity colors (updated to purple accent) */
@@ -354,7 +366,7 @@
 .sev-critical { color: var(--crit); }
 .sev-icon { display: none; }
 .sev-badge-info {
-    background: rgba(59,130,246,0.2);
+    background: var(--info-muted);
     color: var(--info);
     padding: 2px 8px;
     border-radius: 4px;
@@ -362,7 +374,7 @@
     font-weight: bold;
 }
 .sev-badge-warning {
-    background: rgba(245,158,11,0.25);
+    background: var(--warn-muted);
     color: var(--warn);
     padding: 2px 8px;
     border-radius: 4px;
@@ -370,7 +382,7 @@
     font-weight: bold;
 }
 .sev-badge-critical {
-    background: rgba(239,68,68,0.25);
+    background: var(--crit-muted);
     color: var(--crit);
     padding: 2px 8px;
     border-radius: 4px;
@@ -380,7 +392,8 @@
 
 /* Phase 4.3: Acknowledge button (modern pill style) */
 .btn-ack {
-    padding: 4px 12px;
+    padding: var(--space-sm) var(--space-md);
+    min-height: 44px;
     border: 1px solid var(--input-border);
     border-radius: 16px;
     background: transparent;
@@ -388,51 +401,59 @@
     cursor: pointer;
     font-size: 0.8em;
     font-family: inherit;
-    transition: all 0.2s ease;
+    transition: all 0.2s var(--ease-out-expo);
 }
 .btn-ack:hover {
     background: var(--accent-purple, var(--accent));
-    color: #fff;
+    color: var(--text-on-accent);
     border-color: var(--accent-purple, var(--accent));
 }
+.btn-ack:active { opacity: 0.7; }
+.btn-ack:focus-visible { outline: 2px solid var(--amethyst); outline-offset: 2px; }
 
 /* Phase 4.3: Acknowledge All button (modern purple accent) */
 .btn-ack-all {
     padding: 8px 16px;
     border: 1px solid var(--accent-purple, var(--accent));
-    border-radius: 20px;
+    border-radius: var(--radius-lg);
     background: transparent;
     color: var(--accent-purple, var(--accent));
     cursor: pointer;
     font-size: 0.85em;
     font-family: inherit;
     font-weight: 600;
-    transition: all 0.2s ease;
+    transition: all 0.2s var(--ease-out-expo);
 }
 .btn-ack-all:hover {
     background: var(--accent-purple, var(--accent));
-    color: #fff;
-    box-shadow: 0 2px 8px rgba(168,85,247,0.3);
+    color: var(--text-on-accent);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--amethyst) 30%, transparent);
 }
+.btn-ack-all:active { opacity: 0.8; }
+.btn-ack-all:focus-visible { outline: 2px solid var(--amethyst); outline-offset: 2px; }
 
 /* Phase 4.3: Show More button */
 .btn-show-more {
     padding: 8px 24px;
     border: 1px solid var(--input-border);
-    border-radius: 20px;
+    border-radius: var(--radius-lg);
     background: var(--card-bg, var(--card));
     color: var(--text);
     cursor: pointer;
     font-size: 0.85em;
     font-family: inherit;
     font-weight: 600;
-    transition: all 0.2s ease;
+    transition: all 0.2s var(--ease-out-expo);
 }
 .btn-show-more:hover {
     background: var(--accent-purple, var(--accent));
-    color: #fff;
+    color: var(--text-on-accent);
     border-color: var(--accent-purple, var(--accent));
 }
+.btn-show-more:active { opacity: 0.8; }
+.btn-show-more:focus-visible { outline: 2px solid var(--amethyst); outline-offset: 2px; }
+
+.ev-ack-mark { color: var(--text-muted); font-size: 0.8em; }
 
 .events-empty {
     text-align: center; padding: 60px 20px; color: var(--muted); font-size: 0.95em;
@@ -453,6 +474,7 @@
     .severity-pill {
         padding: 6px 12px;
         font-size: 0.75em;
+        min-height: 44px;
     }
     .table-card-header {
         flex-direction: column;
@@ -489,19 +511,37 @@
    Phase 4.4: Correlation Analysis View
    ═══════════════════════════════════════════════════════════════ */
 
-/* Correlation Chart Card */
+/* Correlation Header — left-aligned inline with tabs */
+.correlation-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md, 16px);
+    margin-bottom: var(--space-lg, 20px);
+    flex-wrap: wrap;
+}
+.correlation-header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.correlation-view-title {
+    font-size: 1.15em;
+    font-weight: 700;
+    color: var(--text, var(--text-primary));
+}
+.correlation-view-subtitle {
+    font-size: 0.8em;
+    color: var(--text-muted, var(--muted));
+}
+
+/* Correlation Chart Card — no hover lift (not a clickable element) */
 .correlation-chart-card {
     background: var(--card-bg, var(--card));
     border: 1px solid var(--card-border, var(--input-border));
     border-radius: var(--radius-lg, 12px);
     padding: var(--space-lg, 20px);
     margin-bottom: var(--space-xl, 24px);
-    transition: all 0.2s ease;
-}
-.correlation-chart-card:hover {
-    border-color: var(--accent-purple, #a855f7);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(168,85,247,0.15);
 }
 .correlation-chart-wrap {
     position: relative;
@@ -523,7 +563,7 @@
     pointer-events: none;
     background: var(--card-bg, #1e1e2e);
     border: 1px solid var(--accent-purple, #a855f7);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     padding: 8px 12px;
     font-size: 0.8em;
     z-index: 10;
@@ -558,15 +598,15 @@
     gap: 4px;
     background: transparent;
     border: 1px solid var(--card-border, var(--input-border));
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     padding: 4px 8px;
     font-size: 0.72em;
     color: var(--muted);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.2s var(--ease-out-expo);
 }
 .chart-export-btn:hover {
-    background: rgba(168,85,247,0.1);
+    background: var(--amethyst-muted);
     border-color: var(--accent-purple, #a855f7);
     color: var(--text);
 }
@@ -575,18 +615,26 @@
     top: 6px;
     right: 8px;
     background: var(--accent-purple, #a855f7);
-    color: #fff;
+    color: var(--text-on-accent);
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     padding: 4px 10px;
     font-size: 0.75em;
     cursor: pointer;
     z-index: 5;
     opacity: 0.85;
-    transition: opacity 0.2s;
+    transition: opacity 0.2s var(--ease-out-expo);
 }
 .correlation-zoom-reset:hover {
     opacity: 1;
+}
+.correlation-zoom-reset:active {
+    opacity: 0.7;
+    transform: scale(0.96);
+}
+.correlation-zoom-reset:focus-visible {
+    outline: 2px solid var(--amethyst);
+    outline-offset: 2px;
 }
 .correlation-chart-legend {
     display: flex;
@@ -598,21 +646,64 @@
 }
 .correlation-chart-legend span[data-metric] {
     cursor: pointer;
-    transition: opacity 0.2s, filter 0.2s;
+    transition: opacity 0.2s var(--ease-out-expo), filter 0.2s var(--ease-out-expo);
     user-select: none;
     border-radius: 4px;
-    padding: 2px 4px;
+    padding: 6px 10px;
 }
 .correlation-chart-legend span[data-metric]:hover {
     filter: brightness(1.3);
-    background: rgba(255,255,255,0.08);
+    background: var(--tint-emphasis);
 }
 .correlation-chart-legend span[data-metric].disabled {
     opacity: 0.3;
     text-decoration: line-through;
 }
+.correlation-chart-legend span[data-metric]:active {
+    opacity: 0.7;
+    transform: scale(0.96);
+}
+.correlation-chart-legend span[data-metric]:focus-visible {
+    outline: 2px solid var(--amethyst);
+    outline-offset: 2px;
+}
 .correlation-chart-legend span[data-metric].disabled:hover {
     opacity: 0.5;
+}
+
+.corr-legend-events {
+    position: relative;
+}
+
+.corr-event-filter-btn {
+    cursor: pointer;
+    font-size: 0.8em;
+    opacity: 0.6;
+    margin-left: var(--space-xs);
+    transition: opacity 0.15s var(--ease-out-expo);
+}
+.corr-event-filter-btn:hover {
+    opacity: 1;
+}
+
+.corr-poor-signal-badge {
+    background: var(--crit-muted);
+    padding: 2px var(--space-sm);
+    border-radius: var(--radius-sm);
+    font-size: 0.8em;
+    color: var(--crit);
+}
+
+.corr-event-popover {
+    position: absolute;
+    z-index: 100;
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm) var(--space-sm);
+    min-width: 180px;
+    box-shadow: var(--shadow-lg);
+    font-size: 0.85em;
 }
 
 /* Correlation Table Card */
@@ -644,18 +735,29 @@
 }
 #correlation-table tbody tr {
     transition: background 0.15s;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
+    border-bottom: 1px solid var(--border-tint);
     cursor: pointer;
 }
 #correlation-table tbody tr:hover {
-    background: rgba(168,85,247,0.08);
+    background: color-mix(in srgb, var(--amethyst) 8%, transparent);
 }
 #correlation-table tbody tr.corr-highlight {
-    background: rgba(168,85,247,0.3) !important;
+    background: color-mix(in srgb, var(--amethyst) 30%, transparent) !important;
     box-shadow: inset 4px 0 0 var(--accent-purple, #a855f7);
 }
 #correlation-table tbody tr.corr-highlight td {
-    color: #fff !important;
+    color: var(--text-primary) !important;
+}
+#correlation-table tbody tr.corr-pinned {
+    background: color-mix(in srgb, var(--amethyst) 20%, transparent) !important;
+    box-shadow: inset 4px 0 0 var(--amethyst);
+}
+#correlation-table tbody tr.corr-pinned td {
+    color: var(--text-primary) !important;
+}
+#correlation-table tbody tr:focus-visible {
+    outline: 2px solid var(--amethyst);
+    outline-offset: -2px;
 }
 #correlation-table tbody td {
     padding: 12px 16px;
@@ -664,14 +766,14 @@
 #correlation-table .source-badge {
     display: inline-block;
     padding: 4px 10px;
-    border-radius: 12px;
+    border-radius: var(--radius-sm);
     font-size: 0.75em;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 #correlation-table .source-badge.modem {
-    background: rgba(168,85,247,0.2);
+    background: color-mix(in srgb, var(--amethyst) 20%, transparent);
     color: var(--accent-purple, #a855f7);
 }
 #correlation-table .source-badge.speedtest {
@@ -683,10 +785,31 @@
     color: var(--warn, #ff9800);
 }
 
+/* (correlation-desc removed — replaced by inline subtitle in header) */
+
 /* Phase 4.4: Mobile responsive */
 @media (max-width: 768px) {
     .correlation-chart-card {
         padding: var(--space-md, 16px);
+    }
+    .correlation-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .correlation-chart-legend {
+        flex-wrap: wrap;
+        gap: var(--space-xs);
+        justify-content: flex-start;
+        padding: var(--space-sm) 0;
+    }
+    .correlation-chart-legend span[data-metric] {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        font-size: 0.82em;
+        padding: 6px 12px;
+        border: 1px solid var(--glass-border, var(--card-border));
+        border-radius: var(--radius-pill, 100px);
     }
     #correlation-table thead th,
     #correlation-table tbody td {
@@ -720,7 +843,7 @@
     background: var(--surface);
     color: var(--text);
     border: 1px solid var(--input-border);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     padding: 12px 16px;
     font-size: 0.82em;
     font-weight: normal;
@@ -754,7 +877,7 @@
 .demo-badge {
     display: inline-block;
     background: var(--accent, #ff9800);
-    color: #fff;
+    color: var(--text-on-accent);
     padding: 2px 8px;
     border-radius: 4px;
     font-size: 11px;
@@ -768,7 +891,7 @@
     display: inline-flex;
     align-items: center;
     padding: 4px 12px;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     font-weight: 600;
     gap: 6px;
     cursor: help;
@@ -794,17 +917,17 @@
 }
 .gaming-a, .gaming-b { background: rgba(76,175,80,0.15); color: var(--color-good, var(--good)); }
 .gaming-c { background: rgba(255,152,0,0.15); color: var(--color-warn, var(--warn)); }
-.gaming-d, .gaming-f { background: rgba(244,67,54,0.15); color: var(--color-crit, var(--crit)); }
+.gaming-d, .gaming-f { background: var(--crit-muted); color: var(--color-crit, var(--crit)); }
 
 /* ── Gaming Quality View ── */
 .gaming-overview {
     display: flex;
     align-items: center;
-    gap: 24px;
-    padding: 24px;
+    gap: var(--space-lg, 24px);
+    padding: var(--space-lg, 24px);
     background: var(--surface);
-    border-radius: 12px;
-    margin-bottom: 20px;
+    border-radius: var(--radius-md, 12px);
+    margin-bottom: var(--space-lg, 20px);
 }
 .gaming-overview .gaming-gauge {
     flex: 1;
@@ -820,7 +943,7 @@
     align-items: center;
     justify-content: center;
     padding: 12px 24px;
-    border-radius: 12px;
+    border-radius: var(--radius-md, 12px);
 }
 .gaming-grade-big .gaming-grade-letter {
     font-size: 56px;
@@ -830,77 +953,97 @@
 .gaming-grade-big .gaming-grade-text {
     font-size: 14px;
     font-weight: 600;
-    opacity: 0.8;
+    color: var(--text-secondary);
     margin-top: 4px;
 }
 .gaming-no-speedtest-hint {
-    font-size: 12px;
-    opacity: 0.6;
+    font-size: 0.78em;
+    color: var(--text-muted);
     margin: 8px 0 0;
     display: flex;
     align-items: center;
     gap: 4px;
 }
+.gaming-no-speedtest-hint i, .gaming-no-speedtest-hint svg {
+    width: 14px; height: 14px; flex-shrink: 0;
+}
 .gaming-section-title {
-    font-size: 14px;
+    font-size: 0.78em;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    opacity: 0.6;
-    margin: 0 0 12px;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-sm, 12px);
 }
-.gaming-components { margin-bottom: 20px; }
-.gaming-component-card {
-    background: var(--surface);
-    border-radius: 10px;
-    padding: 14px 18px;
-    margin-bottom: 8px;
-}
-.gaming-comp-header {
+
+/* Score breakdown — compact rows with expandable descriptions */
+.gaming-components { margin-bottom: var(--space-lg, 20px); }
+.gaming-comp-grid { display: grid; gap: 2px; }
+.gaming-comp-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
+    gap: var(--space-sm, 8px);
+    padding: 10px 14px;
+    background: var(--surface);
+    border-radius: var(--radius-sm, 8px);
+    cursor: pointer;
+    transition: background 0.15s;
 }
-.gaming-comp-icon { display: flex; opacity: 0.6; }
-.gaming-comp-name { font-weight: 600; font-size: 14px; flex: 1; }
+.gaming-comp-row:hover { background: var(--tint-hover, rgba(255,255,255,0.04)); }
+.gaming-comp-row:focus-visible { outline: 2px solid var(--amethyst); outline-offset: -2px; }
+.gaming-comp-icon { display: flex; color: var(--text-muted); flex-shrink: 0; }
+.gaming-comp-icon i, .gaming-comp-icon svg { width: 16px; height: 16px; }
+.gaming-comp-name { font-weight: 600; font-size: 0.88em; flex-shrink: 0; }
 .gaming-comp-weight {
-    font-size: 11px;
-    opacity: 0.5;
+    font-size: 0.72em;
+    color: var(--text-muted);
     padding: 2px 6px;
-    background: var(--bg);
+    background: var(--tint-subtle, rgba(255,255,255,0.02));
     border-radius: 4px;
+    flex-shrink: 0;
 }
-.gaming-comp-score {
-    font-weight: 700;
-    font-size: 15px;
-    min-width: 32px;
-    text-align: right;
-}
-.score-good { color: var(--color-good, var(--good)); }
-.score-warn { color: var(--color-warn, var(--warn)); }
-.score-crit { color: var(--color-crit, var(--crit)); }
-.gaming-comp-bar {
-    height: 6px;
-    background: var(--bg);
-    border-radius: 3px;
+.gaming-comp-bar-inline {
+    flex: 1;
+    height: 4px;
+    background: var(--tint-hover, rgba(255,255,255,0.04));
+    border-radius: 2px;
     overflow: hidden;
-    margin-bottom: 6px;
+    min-width: 40px;
 }
 .gaming-comp-fill {
     height: 100%;
-    border-radius: 3px;
-    transition: width 0.4s ease;
+    border-radius: 2px;
+    transition: width 0.4s var(--ease-out-expo);
 }
-.fill-good { background: var(--color-good, var(--good)); }
-.fill-warn { background: var(--color-warn, var(--warn)); }
-.fill-crit { background: var(--color-crit, var(--crit)); }
+.gaming-comp-score {
+    font-weight: 700;
+    font-size: 0.92em;
+    min-width: 28px;
+    text-align: right;
+    flex-shrink: 0;
+}
+.gaming-comp-chevron {
+    width: 14px; height: 14px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    transition: transform 0.2s;
+}
+.gaming-comp-row.open .gaming-comp-chevron { transform: rotate(180deg); }
 .gaming-comp-detail {
-    font-size: 12px;
-    opacity: 0.55;
+    font-size: 0.8em;
+    color: var(--text-secondary);
     margin: 0;
-    line-height: 1.4;
+    line-height: 1.5;
+    padding: 0 14px 10px 42px;
+    display: none;
 }
+.gaming-comp-row.open + .gaming-comp-detail { display: block; }
+.score-good { color: var(--good); }
+.score-warn { color: var(--warn); }
+.score-crit { color: var(--crit); }
+.fill-good { background: var(--good); }
+.fill-warn { background: var(--warn); }
+.fill-crit { background: var(--crit); }
 /* Gaming Gauge Band */
 .gaming-gauge {
     background: var(--surface);
@@ -910,7 +1053,7 @@
 .gaming-gauge-band {
     display: flex;
     height: 32px;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     overflow: hidden;
 }
 .gaming-gauge-segment {
@@ -964,38 +1107,58 @@
     white-space: nowrap;
 }
 [data-theme="light"] .gaming-gauge-segment { color: rgba(0,0,0,0.7); }
+
 /* Gaming Genre Cards */
-.gaming-genres { margin-bottom: 20px; }
+.gaming-genres { margin-bottom: var(--space-lg, 20px); }
+.gaming-genres-summary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm, 8px);
+    padding: var(--space-md, 14px) var(--space-lg, 18px);
+    border-radius: var(--radius-sm, 8px);
+    font-size: 0.88em;
+    font-weight: 500;
+    margin-bottom: var(--space-sm, 8px);
+}
+.gaming-genres-summary.genre-ok {
+    background: var(--good-muted);
+    color: var(--good);
+}
+.gaming-genres-summary i, .gaming-genres-summary svg { width: 18px; height: 18px; flex-shrink: 0; }
+.gaming-genre-cards.gaming-genres-collapsed { display: none; }
 .gaming-genre-cards {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 10px;
+    gap: var(--space-sm, 10px);
 }
 .gaming-genre-card {
     background: var(--surface);
-    border-radius: 10px;
+    border-radius: var(--radius-sm, 10px);
     padding: 14px 16px;
     display: flex;
     flex-direction: column;
     gap: 4px;
     border-left: 3px solid transparent;
 }
-.gaming-genre-icon { opacity: 0.6; }
-.gaming-genre-name { font-weight: 700; font-size: 14px; }
-.gaming-genre-examples { font-size: 12px; opacity: 0.45; }
-.gaming-genre-verdict { font-size: 13px; font-weight: 500; margin-top: 4px; }
-.genre-ok { border-left-color: var(--color-good, var(--good)); }
-.genre-ok .gaming-genre-verdict { color: var(--color-good, var(--good)); }
-.genre-warn { border-left-color: var(--color-warn, var(--warn)); }
-.genre-warn .gaming-genre-verdict { color: var(--color-warn, var(--warn)); }
-.genre-bad { border-left-color: var(--color-crit, var(--crit)); }
-.genre-bad .gaming-genre-verdict { color: var(--color-crit, var(--crit)); }
+.gaming-genre-icon { color: var(--text-muted); }
+.gaming-genre-icon i, .gaming-genre-icon svg { width: 18px; height: 18px; }
+.gaming-genre-name { font-weight: 700; font-size: 0.88em; }
+.gaming-genre-examples { font-size: 0.75em; color: var(--text-muted); }
+.gaming-genre-verdict { font-size: 0.82em; font-weight: 500; margin-top: 4px; }
+.genre-ok { border-left-color: var(--good); }
+.genre-ok .gaming-genre-verdict { color: var(--good); }
+.genre-warn { border-left-color: var(--warn); }
+.genre-warn .gaming-genre-verdict { color: var(--warn); }
+.genre-bad { border-left-color: var(--crit); }
+.genre-bad .gaming-genre-verdict { color: var(--crit); }
 
 @media (max-width: 600px) {
     .gaming-overview { flex-direction: column; gap: 16px; }
     .gaming-grade-big { flex-direction: row; gap: 12px; padding: 10px 20px; }
     .gaming-grade-big .gaming-grade-letter { font-size: 36px; }
     .gaming-grade-big .gaming-grade-text { margin-top: 0; }
+    .gaming-comp-row { flex-wrap: wrap; }
+    .gaming-comp-bar-inline { min-width: 100%; order: 10; }
 }
 
 
@@ -1020,7 +1183,7 @@
     font-size: 11px;
     white-space: nowrap;
     border-radius: 4px;
-    border: 1px solid rgba(168, 85, 247, 0.3);
+    border: 1px solid color-mix(in srgb, var(--amethyst) 30%, transparent);
     z-index: 1000;
     pointer-events: none;
 }
@@ -1036,7 +1199,7 @@
 }
 
 .hero-card.health-crit .issue-badge {
-    background: rgba(244,67,54,0.15);
+    background: var(--crit-muted);
     color: var(--color-crit, var(--crit));
 }
 
@@ -1044,20 +1207,20 @@
 /* ── Shared Button Utilities ── */
 .btn-small {
     padding: 5px 14px;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     font-size: 0.82rem;
     font-weight: 600;
     cursor: pointer;
     border: none;
-    transition: all 0.15s ease;
+    transition: all 0.15s var(--ease-out-expo);
 }
 .btn-accent {
     background: var(--accent-purple, var(--accent));
-    color: #fff;
+    color: var(--text-on-accent);
 }
 .btn-accent:hover { opacity: 0.85; }
 .btn-muted {
-    background: rgba(255,255,255,0.08);
+    background: var(--tint-emphasis);
     color: var(--text-secondary);
     border: 1px solid var(--input-border);
 }
@@ -1068,6 +1231,88 @@
 }
 .btn-ghost:hover { color: var(--text); }
 
+
+/* ── Channel View Controls ── */
+.ch-controls {
+    display: flex;
+    gap: 12px;
+    margin-bottom: var(--space-lg, 20px);
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+/* Channel info bar */
+.ch-info-bar {
+    display: flex;
+    gap: var(--space-md, 16px);
+    padding: var(--space-sm, 8px) var(--space-md, 16px);
+    margin-bottom: var(--space-md, 16px);
+    background: var(--tint-subtle, rgba(255,255,255,0.02));
+    border: 1px solid var(--glass-border, var(--card-border));
+    border-radius: var(--radius-sm, 8px);
+    font-size: 0.82em;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.ch-info-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+}
+.ch-info-item strong {
+    color: var(--text-primary);
+}
+.ch-info-sep {
+    width: 1px;
+    height: 16px;
+    background: var(--glass-border);
+    flex-shrink: 0;
+}
+.ch-info-health {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 600;
+}
+.ch-info-health.good { color: var(--good); }
+.ch-info-health.tolerated { color: var(--tolerated, var(--warn)); }
+.ch-info-health.marginal, .ch-info-health.warn, .ch-info-health.warning { color: var(--warn); }
+.ch-info-health.critical, .ch-info-health.crit { color: var(--crit); }
+
+/* Channel onboarding (empty state) */
+.ch-onboarding {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md, 16px);
+    padding: var(--space-xl, 32px);
+    background: var(--tint-subtle, rgba(255,255,255,0.02));
+    border: 1px dashed var(--glass-border);
+    border-radius: var(--radius-md, 12px);
+    color: var(--text-secondary);
+}
+.ch-onboarding > i, .ch-onboarding > svg {
+    width: 32px; height: 32px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+.ch-onboarding-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.ch-onboarding-text strong {
+    color: var(--text-primary);
+    font-size: 0.95em;
+}
+.ch-onboarding-text span {
+    font-size: 0.85em;
+}
+
+/* Full-width chart card (modulation) */
+.ch-full-width {
+    grid-column: 1 / -1;
+}
 
 /* ── Channel Compare ── */
 .compare-controls {
@@ -1102,7 +1347,12 @@
 .compare-controls select:focus {
     outline: none;
     border-color: var(--accent-purple, var(--accent));
-    box-shadow: 0 0 0 2px rgba(168,85,247,0.2);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--amethyst) 20%, transparent);
+}
+.channel-select-styled:focus-visible,
+.compare-controls select:focus-visible {
+    outline: 2px solid var(--amethyst);
+    outline-offset: 2px;
 }
 .compare-add-btn {
     padding: 8px 18px;
@@ -1114,13 +1364,13 @@
     font-family: inherit;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.2s var(--ease-out-expo);
 }
 .compare-add-btn:hover {
-    color: #fff;
+    color: var(--text-on-accent);
     background: var(--accent-purple, var(--accent));
     border-color: var(--accent-purple, var(--accent));
-    box-shadow: 0 2px 8px rgba(168,85,247,0.3);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--amethyst) 30%, transparent);
 }
 .compare-chips {
     display: flex;
@@ -1136,7 +1386,7 @@
     border-radius: 16px;
     font-size: 13px;
     font-weight: 500;
-    color: #fff;
+    color: var(--text-on-accent);
 }
 .compare-chip-remove {
     background: none;
@@ -1148,5 +1398,20 @@
     line-height: 1;
 }
 .compare-chip-remove:hover {
-    color: #fff;
+    color: var(--text-on-accent);
+}
+
+/* ── Smart Capture speedtest badge ── */
+.st-row-sc {
+    background: rgba(122, 162, 247, 0.06);
+    border-left: 2px solid var(--accent);
+}
+.sc-badge {
+    font-size: 0.75em;
+    color: var(--accent);
+    white-space: nowrap;
+}
+.st-sc-col {
+    text-align: right;
+    width: 100px;
 }

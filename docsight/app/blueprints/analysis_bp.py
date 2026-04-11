@@ -8,10 +8,9 @@ from flask import Blueprint, request, jsonify
 from app.web import (
     require_auth,
     get_storage, get_config_manager, get_state,
-    _localize_timestamps, _get_lang, _get_tz_name,
+    _localize_timestamps,
 )
 from app.gaming_index import compute_gaming_index
-from app.i18n import get_translations
 
 log = logging.getLogger("docsis.web")
 
@@ -200,7 +199,7 @@ def api_correlation():
 
     sources_param = request.args.get("sources", "")
     if sources_param:
-        valid = {"modem", "speedtest", "events", "bnetz"}
+        valid = {"modem", "speedtest", "events", "bnetz", "capture"}
         sources = valid & set(s.strip() for s in sources_param.split(","))
         if not sources:
             sources = valid

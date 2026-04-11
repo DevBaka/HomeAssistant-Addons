@@ -18,9 +18,9 @@ def utc_now():
     return datetime.now(timezone.utc).strftime(_UTC_FMT)
 
 
-def utc_cutoff(days=0, hours=0):
-    """Return UTC timestamp N days/hours in the past as 'YYYY-MM-DDTHH:MM:SSZ'."""
-    dt = datetime.now(timezone.utc) - timedelta(days=days, hours=hours)
+def utc_cutoff(days=0, hours=0, minutes=0):
+    """Return UTC timestamp N days/hours/minutes in the past as 'YYYY-MM-DDTHH:MM:SSZ'."""
+    dt = datetime.now(timezone.utc) - timedelta(days=days, hours=hours, minutes=minutes)
     return dt.strftime(_UTC_FMT)
 
 
@@ -84,15 +84,6 @@ def local_to_utc(local_ts, tz_name):
     utc_dt = local_dt.astimezone(timezone.utc)
     return utc_dt.strftime(_UTC_FMT)
 
-
-def local_now(tz_name, fmt=_LOCAL_FMT):
-    """Return current local time in the given timezone.
-
-    Useful for scheduling comparisons (e.g. 'is it past snapshot_time?').
-    """
-    if not tz_name:
-        return datetime.now(timezone.utc).strftime(fmt)
-    return datetime.now(ZoneInfo(tz_name)).strftime(fmt)
 
 
 def local_today(tz_name):

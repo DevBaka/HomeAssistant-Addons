@@ -14,6 +14,12 @@ from .storage import SnapshotStorage
 
 from .collectors import discover_collectors
 
+try:
+    from .drivers.surfboard import TransientHtmlChannelPageError as _TransientHtmlError
+except ImportError:
+    class _TransientHtmlError(Exception):  # type: ignore[no-redef]
+        """Stub -- never raised when surfboard driver is absent."""
+
 logging.basicConfig(
     level=getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO),
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -106,13 +112,64 @@ def polling_loop(config_mgr, storage, stop_event):
         notifier = NotificationDispatcher(config_mgr)
         log.info("Notifications: webhook configured")
 
+    # Smart Capture (always instantiated — _is_enabled() gates at runtime)
+    from .smart_capture import SmartCaptureEngine, Trigger
+    from .smart_capture.sub_filters import (
+        modulation_sub_filter, snr_sub_filter, error_spike_sub_filter,
+        health_sub_filter, packet_loss_sub_filter,
+    )
+    smart_capture = SmartCaptureEngine(storage, config_mgr)
+    smart_capture.register_trigger(Trigger(
+        event_type="modulation_change", action_type="capture",
+        config_key="sc_trigger_modulation",
+        min_severity="warning", require_details={"direction": "downgrade"},
+        sub_filter=modulation_sub_filter,
+    ))
+    smart_capture.register_trigger(Trigger(
+        event_type="snr_change", action_type="capture",
+        config_key="sc_trigger_snr", min_severity="warning",
+        sub_filter=snr_sub_filter,
+    ))
+    smart_capture.register_trigger(Trigger(
+        event_type="error_spike", action_type="capture",
+        config_key="sc_trigger_error_spike",
+        sub_filter=error_spike_sub_filter,
+    ))
+    smart_capture.register_trigger(Trigger(
+        event_type="health_change", action_type="capture",
+        config_key="sc_trigger_health", min_severity="warning",
+        sub_filter=health_sub_filter,
+    ))
+    smart_capture.register_trigger(Trigger(
+        event_type="cm_packet_loss_warning", action_type="capture",
+        config_key="sc_trigger_packet_loss",
+        sub_filter=packet_loss_sub_filter,
+    ))
+    log.info("Smart Capture: registered %d trigger(s)", len(smart_capture.triggers))
+
     web.update_state(poll_interval=config["poll_interval"])
 
     event_detector = EventDetector(hysteresis=config_mgr.get("health_hysteresis", 0))
     collectors = discover_collectors(
         config_mgr, storage, event_detector, mqtt_pub, web, analyzer,
-        notifier=notifier,
+        notifier=notifier, smart_capture=smart_capture,
     )
+
+    # Wire STT adapter if STT configured and not demo mode
+    if config_mgr.is_speedtest_configured() and not config_mgr.is_demo_mode():
+        from .smart_capture.adapters.speedtest import SpeedtestAdapter
+        stt_adapter = SpeedtestAdapter(storage, config_mgr)
+        smart_capture.register_adapter("capture", stt_adapter)
+        stt_collector = next((c for c in collectors if c.name == "speedtest"), None)
+        if stt_collector:
+            stt_collector.on_import = stt_adapter.on_results_imported
+            log.info("Smart Capture: STT adapter wired to speedtest collector")
+
+    # Wire Smart Capture to Connection Monitor collector
+    cm_collector = next((c for c in collectors if c.name == "connection_monitor"), None)
+    if cm_collector and hasattr(cm_collector, 'set_smart_capture'):
+        cm_collector.set_smart_capture(smart_capture)
+        log.info("Smart Capture: wired to Connection Monitor collector")
 
     # Inject collectors into web layer for manual polling and status endpoint
     modem_collector = next((c for c in collectors if c.name in ("modem", "demo")), None)
@@ -171,6 +228,7 @@ def polling_loop(config_mgr, storage, stop_event):
                         web=web,
                         poll_interval=config_mgr.get("poll_interval", 900),
                         notifier=notifier,
+                        smart_capture=smart_capture,
                     )
                     collectors = [
                         new_modem if c is modem_collector else c
@@ -208,6 +266,9 @@ def polling_loop(config_mgr, storage, stop_event):
                         else:
                             collector.record_failure()
                             log.warning("%s: %s", collector.name, result.error)
+                    except _TransientHtmlError:
+                        collector.record_skip()
+                        log.warning("%s: transient HTML response, skipping poll", collector.name)
                     except Exception as e:
                         collector.record_failure()
                         log.error("%s error: %s", collector.name, e)
@@ -219,9 +280,35 @@ def polling_loop(config_mgr, storage, stop_event):
                         log.error("%s: timed out after 120s", collector.name)
                         future.cancel()
 
+            # ── Smart Capture expiry check (every 60s) ──
+            if smart_capture:
+                if not hasattr(polling_loop, '_sc_expiry_counter'):
+                    polling_loop._sc_expiry_counter = 0
+                polling_loop._sc_expiry_counter += 1
+                if polling_loop._sc_expiry_counter >= 60:
+                    polling_loop._sc_expiry_counter = 0
+                    from .tz import utc_cutoff
+                    cutoff = utc_cutoff(minutes=10)
+                    for action_type in smart_capture.adapter_action_types:
+                        expired = storage.expire_stale_fired(cutoff, action_type=action_type)
+                        if expired:
+                            log.info("Smart Capture: expired %d stale %s executions",
+                                     expired, action_type)
+                    # Expire orphaned PENDING executions (no adapter registered)
+                    pending_expired = storage.expire_stale_pending(cutoff)
+                    if pending_expired:
+                        log.info("Smart Capture: expired %d orphaned pending executions",
+                                 pending_expired)
+
             stop_event.wait(1)
     finally:
         executor.shutdown(wait=False, cancel_futures=True)
+        for c in collectors:
+            if hasattr(c, "stop"):
+                try:
+                    c.stop()
+                except Exception:
+                    pass
 
     # Cleanup MQTT
     if mqtt_pub:

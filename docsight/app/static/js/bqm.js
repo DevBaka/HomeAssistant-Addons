@@ -1,27 +1,47 @@
 /* ═══ DOCSight BQM (Breitbandmessung Quality Monitor) ═══ */
-/* Calendar navigation, live refresh, slideshow, graph display, and image import */
+/* Calendar navigation, live refresh, graph display, and image import */
 /* Note: innerHTML usage is safe here — all data is from trusted server responses or internal state */
+
+/* Defensive fallback if bqm-chart.js fails to load */
+if (typeof BQMChart === 'undefined') {
+    var BQMChart = { render: function() {}, destroy: function() {} };
+}
 
 /* ── BQM State ── */
 var bqmDate = todayStr();
 var _bqmAvailableDates = new Set();
+var _bqmCsvDates = new Set();
+var _bqmPngDates = new Set();
 var _bqmCalYear = new Date().getFullYear();
 var _bqmCalMonth = new Date().getMonth(); // 0-based
 var _bqmDatesLoaded = false;
 var _bqmLiveTimer = null;
 var _BQM_LIVE_INTERVAL = 900000; // 15 min
 var _BQM_LIVE_JITTER = 120000; // 0-120s random offset
-var _bqmSlideshow = { playing: false, speed: 2000, range: [], currentIdx: 0, timer: null };
 var _bqmRangeStart = null;
 var _bqmRangeEnd = null;
+var _bqmViewMode = 'png';
 
 /* ── BQM Calendar Navigation ── */
 function fetchBqmDates(cb) {
-    fetch('/api/bqm/dates').then(function(r) { return r.json(); }).then(function(dates) {
-        _bqmAvailableDates = new Set(dates);
+    fetch('/api/bqm/data/dates').then(function(r) { return r.json(); }).then(function(data) {
+        var csvDates = data.csv_dates || [];
+        var pngDates = data.png_dates || [];
+        _bqmCsvDates = new Set(csvDates);
+        _bqmPngDates = new Set(pngDates);
+        _bqmAvailableDates = new Set(csvDates.concat(pngDates));
         _bqmDatesLoaded = true;
+        updateBqmQuickButtons();
         if (cb) cb();
     }).catch(function() { _bqmDatesLoaded = true; if (cb) cb(); });
+}
+
+function updateBqmQuickButtons() {
+    var hasCsv = _bqmCsvDates.size > 0;
+    ['bqm-today-btn', 'bqm-yesterday-btn', 'bqm-7d-btn', 'bqm-30d-btn'].forEach(function(id) {
+        var btn = document.getElementById(id);
+        if (btn) btn.style.display = hasCsv ? 'inline-flex' : 'none';
+    });
 }
 
 function renderBqmCalendar(year, month) {
@@ -48,7 +68,11 @@ function renderBqmCalendar(year, month) {
         cell.className = 'bqm-day';
         cell.textContent = d;
         cell.setAttribute('data-date', dateStr);
-        if (_bqmAvailableDates.has(dateStr)) cell.classList.add('has-data');
+        if (_bqmAvailableDates.has(dateStr)) {
+            cell.classList.add('has-data');
+            if (_bqmCsvDates.has(dateStr)) cell.classList.add('has-csv');
+            else if (_bqmPngDates.has(dateStr)) cell.classList.add('has-png');
+        }
         if (dateStr === today) cell.classList.add('today');
         if (dateStr === bqmDate) cell.classList.add('selected');
         // Range highlighting
@@ -66,11 +90,12 @@ function renderBqmCalendar(year, month) {
                     var b = bqmDate < ds ? ds : bqmDate;
                     _bqmRangeStart = a;
                     _bqmRangeEnd = b;
+                    bqmDate = b;
+                    stopBqmLiveRefresh();
                     updateBqmRangeLabel();
                     renderBqmCalendar(_bqmCalYear, _bqmCalMonth);
+                    loadBqmRangeChart(a, b);
                 } else {
-                    _bqmRangeStart = null;
-                    _bqmRangeEnd = null;
                     selectBqmDate(ds);
                 }
             };
@@ -79,10 +104,93 @@ function renderBqmCalendar(year, month) {
     }
 }
 
+function setBqmViewMode(mode) {
+    _bqmViewMode = mode;
+    var chart = document.getElementById('bqm-chart-container');
+    var imageWrap = document.getElementById('bqm-image-wrap');
+    var toggleUplot = document.getElementById('bqm-toggle-uplot');
+    var togglePng = document.getElementById('bqm-toggle-png');
+    if (chart) chart.style.display = mode === 'chart' ? 'block' : 'none';
+    if (imageWrap) imageWrap.style.display = mode === 'chart' ? 'none' : 'block';
+    if (toggleUplot) toggleUplot.classList.toggle('active', mode === 'chart');
+    if (togglePng) togglePng.classList.toggle('active', mode === 'png');
+}
+
+function updateBqmViewToggle(date) {
+    var toggle = document.getElementById('bqm-view-toggle');
+    if (!toggle) return;
+    var hasBoth = _bqmCsvDates.has(date) && _bqmPngDates.has(date);
+    toggle.style.display = hasBoth ? 'flex' : 'none';
+}
+
+function showBqmCard() {
+    var card = document.getElementById('bqm-card');
+    var noData = document.getElementById('bqm-no-data');
+    if (card) card.style.display = 'block';
+    if (noData) noData.style.display = 'none';
+}
+
+function showBqmNoData(msg) {
+    var card = document.getElementById('bqm-card');
+    var noData = document.getElementById('bqm-no-data');
+    if (card) card.style.display = 'none';
+    if (noData) {
+        noData.textContent = msg || T.bqm_no_data || 'No BQM graph for this date.';
+        noData.style.display = 'block';
+    }
+}
+
+function loadBqmChart(date) {
+    setBqmViewMode('chart');
+    hideBqmLiveBadge();
+    updateBqmViewToggle(date);
+    fetch('/api/bqm/data/' + date)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.points) {
+                showBqmNoData(T.bqm_no_csv_data || 'No CSV data for this date.');
+                return;
+            }
+            BQMChart.render('bqm-chart-container', data);
+            showBqmCard();
+        })
+        .catch(function() {
+            showBqmNoData(T.bqm_no_csv_data || 'No CSV data for this date.');
+        });
+}
+
+function loadBqmRangeChart(start, end) {
+    setBqmViewMode('chart');
+    hideBqmLiveBadge();
+    var toggle = document.getElementById('bqm-view-toggle');
+    if (toggle) toggle.style.display = 'none';
+    fetch('/api/bqm/data/range?start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.points) {
+                showBqmNoData(T.bqm_csv_dates_only || 'This range only has PNG fallback data.');
+                return;
+            }
+            BQMChart.render('bqm-chart-container', data);
+            showBqmCard();
+        })
+        .catch(function() {
+            showBqmNoData(T.bqm_no_csv_data || 'No CSV data for this date.');
+        });
+}
+
 function selectBqmDate(date) {
     bqmDate = date;
-    stopBqmSlideshow();
+    _bqmRangeStart = null;
+    _bqmRangeEnd = null;
+    stopBqmLiveRefresh();
     renderBqmCalendar(_bqmCalYear, _bqmCalMonth);
+    updateBqmRangeLabel();
+    updateBqmViewToggle(date);
+    if (_bqmCsvDates.has(date)) {
+        loadBqmChart(date);
+        return;
+    }
     if (date === todayStr()) {
         loadBqmLive();
     } else {
@@ -108,22 +216,61 @@ function initBqmCalendar() {
     });
 }
 
+function setBqmQuickRange(days) {
+    var endDate = todayStr();
+    var end = new Date(endDate + 'T12:00:00');
+    var start = new Date(end);
+    start.setDate(start.getDate() - (days - 1));
+    _bqmRangeStart = start.getFullYear() + '-' + pad(start.getMonth() + 1) + '-' + pad(start.getDate());
+    _bqmRangeEnd = endDate;
+    bqmDate = _bqmRangeEnd;
+    _bqmCalYear = end.getFullYear();
+    _bqmCalMonth = end.getMonth();
+    stopBqmLiveRefresh();
+    updateBqmRangeLabel();
+    renderBqmCalendar(_bqmCalYear, _bqmCalMonth);
+    loadBqmRangeChart(_bqmRangeStart, _bqmRangeEnd);
+}
+
+function selectBqmQuickDate(date) {
+    var d = new Date(date + 'T12:00:00');
+    _bqmCalYear = d.getFullYear();
+    _bqmCalMonth = d.getMonth();
+    selectBqmDate(date);
+}
+
 // Quick-jump buttons
 var bqmTodayBtn = document.getElementById('bqm-today-btn');
 var bqmYesterdayBtn = document.getElementById('bqm-yesterday-btn');
+var bqm7dBtn = document.getElementById('bqm-7d-btn');
+var bqm30dBtn = document.getElementById('bqm-30d-btn');
 if (bqmTodayBtn) bqmTodayBtn.addEventListener('click', function() {
-    var t = todayStr();
-    _bqmCalYear = new Date().getFullYear();
-    _bqmCalMonth = new Date().getMonth();
-    selectBqmDate(t);
+    var today = todayStr();
+    if (_bqmCsvDates.has(today)) {
+        setBqmQuickRange(1);
+        return;
+    }
+    selectBqmQuickDate(today);
 });
 if (bqmYesterdayBtn) bqmYesterdayBtn.addEventListener('click', function() {
-    var d = new Date(); d.setDate(d.getDate() - 1);
+    var d = new Date();
+    d.setDate(d.getDate() - 1);
     var yd = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+    if (!_bqmCsvDates.has(yd)) {
+        selectBqmQuickDate(yd);
+        return;
+    }
+    _bqmRangeStart = yd;
+    _bqmRangeEnd = yd;
+    bqmDate = yd;
     _bqmCalYear = d.getFullYear();
     _bqmCalMonth = d.getMonth();
-    selectBqmDate(yd);
+    updateBqmRangeLabel();
+    renderBqmCalendar(_bqmCalYear, _bqmCalMonth);
+    loadBqmRangeChart(yd, yd);
 });
+if (bqm7dBtn) bqm7dBtn.addEventListener('click', function() { setBqmQuickRange(7); });
+if (bqm30dBtn) bqm30dBtn.addEventListener('click', function() { setBqmQuickRange(30); });
 
 // Month nav
 var bqmMonthPrev = document.getElementById('bqm-month-prev');
@@ -134,11 +281,11 @@ if (bqmMonthNext) bqmMonthNext.addEventListener('click', function() { bqmMonthNa
 /* ── BQM Live Refresh ── */
 function loadBqmLive() {
     var img = document.getElementById('bqm-image');
-    var noData = document.getElementById('bqm-no-data');
-    var card = document.getElementById('bqm-card');
-    if (!img || !noData) return;
-    if (card) card.style.display = 'none';
-    noData.style.display = 'none';
+    if (!img) return;
+    setBqmViewMode('png');
+    BQMChart.destroy('bqm-chart-container');
+    var toggle = document.getElementById('bqm-view-toggle');
+    if (toggle) toggle.style.display = 'none';
     fetch('/api/bqm/live').then(function(r) {
         if (!r.ok) throw new Error('Live fetch failed');
         var source = r.headers.get('X-BQM-Source') || 'cached';
@@ -149,13 +296,11 @@ function loadBqmLive() {
     }).then(function(data) {
         var url = URL.createObjectURL(data.blob);
         img.onload = function() {
-            if (card) card.style.display = 'block';
+            showBqmCard();
             URL.revokeObjectURL(url);
         };
         img.onerror = function() {
-            if (card) card.style.display = 'none';
-            noData.textContent = T.bqm_no_data || 'No BQM graph for this date.';
-            noData.style.display = 'block';
+            showBqmNoData(T.bqm_no_data || 'No BQM graph for this date.');
             URL.revokeObjectURL(url);
         };
         img.src = url;
@@ -206,168 +351,43 @@ function stopBqmLiveRefresh() {
     if (_bqmLiveTimer) { clearTimeout(_bqmLiveTimer); _bqmLiveTimer = null; }
 }
 
-/* ── BQM Slideshow ── */
-function getBqmRangeDates() {
-    if (!_bqmRangeStart || !_bqmRangeEnd) {
-        // Use all available dates
-        return Array.from(_bqmAvailableDates).sort();
-    }
-    return Array.from(_bqmAvailableDates).filter(function(d) {
-        return d >= _bqmRangeStart && d <= _bqmRangeEnd;
-    }).sort();
-}
-
-function startBqmSlideshow() {
-    var dates = getBqmRangeDates();
-    if (dates.length === 0) return;
-    _bqmSlideshow.range = dates;
-    _bqmSlideshow.currentIdx = 0;
-    _bqmSlideshow.playing = true;
-    updateBqmSlideshowUI();
-    selectBqmSlideshowFrame();
-    _bqmSlideshow.timer = setInterval(function() {
-        _bqmSlideshow.currentIdx++;
-        if (_bqmSlideshow.currentIdx >= _bqmSlideshow.range.length) {
-            _bqmSlideshow.currentIdx = 0; // loop
-        }
-        selectBqmSlideshowFrame();
-    }, _bqmSlideshow.speed);
-}
-
-function pauseBqmSlideshow() {
-    if (_bqmSlideshow.timer) { clearInterval(_bqmSlideshow.timer); _bqmSlideshow.timer = null; }
-    _bqmSlideshow.playing = false;
-    updateBqmSlideshowUI();
-}
-
-function stopBqmSlideshow() {
-    if (_bqmSlideshow.timer) { clearInterval(_bqmSlideshow.timer); _bqmSlideshow.timer = null; }
-    _bqmSlideshow.playing = false;
-    _bqmSlideshow.range = [];
-    _bqmSlideshow.currentIdx = 0;
-    updateBqmSlideshowUI();
-}
-
-function selectBqmSlideshowFrame() {
-    var date = _bqmSlideshow.range[_bqmSlideshow.currentIdx];
-    if (!date) return;
-    bqmDate = date;
-    // Update calendar to show the month of the current frame
-    var d = new Date(date + 'T12:00:00');
-    _bqmCalYear = d.getFullYear();
-    _bqmCalMonth = d.getMonth();
-    renderBqmCalendar(_bqmCalYear, _bqmCalMonth);
-    hideBqmLiveBadge();
-    loadBqmGraph(date);
-}
-
-function updateBqmSlideshowUI() {
-    var playBtn = document.getElementById('bqm-play-btn');
-    var stopBtn = document.getElementById('bqm-stop-btn');
-    if (!playBtn) return;
-    if (_bqmSlideshow.playing) {
-        // Show pause icon
-        playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><rect x="5" y="4" width="4" height="16" rx="1"/><rect x="15" y="4" width="4" height="16" rx="1"/></svg>';
-        playBtn.classList.add('playing');
-        playBtn.title = T.bqm_pause || 'Pause';
-        if (stopBtn) stopBtn.style.display = 'inline-flex';
-    } else {
-        // Show play icon
-        playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><polygon points="6,4 20,12 6,20"/></svg>';
-        playBtn.classList.remove('playing');
-        playBtn.title = T.bqm_play || 'Play';
-        if (stopBtn) stopBtn.style.display = _bqmSlideshow.range.length ? 'inline-flex' : 'none';
-    }
-}
-
 function updateBqmRangeLabel() {
     var label = document.getElementById('bqm-range-label');
     if (!label) return;
     if (_bqmRangeStart && _bqmRangeEnd) {
-        var count = getBqmRangeDates().length;
+        var count = Array.from(_bqmAvailableDates).filter(function(d) {
+            return d >= _bqmRangeStart && d <= _bqmRangeEnd;
+        }).length;
         label.textContent = formatDateDE(_bqmRangeStart) + ' \u2013 ' + formatDateDE(_bqmRangeEnd) + ' (' + count + ')';
     } else {
         label.textContent = '';
     }
 }
 
-// Play/Pause button
-var bqmPlayBtn = document.getElementById('bqm-play-btn');
-if (bqmPlayBtn) bqmPlayBtn.addEventListener('click', function() {
-    if (_bqmSlideshow.playing) {
-        pauseBqmSlideshow();
-    } else {
-        startBqmSlideshow();
-    }
+/* ── BQM View Toggle (uPlot / PNG) ── */
+var bqmToggleUplot = document.getElementById('bqm-toggle-uplot');
+var bqmTogglePng = document.getElementById('bqm-toggle-png');
+if (bqmToggleUplot) bqmToggleUplot.addEventListener('click', function() {
+    if (_bqmViewMode === 'chart') return;
+    loadBqmChart(bqmDate);
 });
-
-// Stop button
-var bqmStopBtn = document.getElementById('bqm-stop-btn');
-if (bqmStopBtn) bqmStopBtn.addEventListener('click', function() {
-    stopBqmSlideshow();
-});
-
-// Speed tabs
-var bqmSpeedTabs = document.querySelectorAll('#bqm-speed-tabs .trend-tab');
-bqmSpeedTabs.forEach(function(btn) {
-    btn.addEventListener('click', function() {
-        _bqmSlideshow.speed = parseInt(this.getAttribute('data-speed'), 10);
-        bqmSpeedTabs.forEach(function(b) { b.classList.remove('active'); });
-        this.classList.add('active');
-        if (_bqmSlideshow.playing) {
-            pauseBqmSlideshow();
-            startBqmSlideshow();
-        }
-    });
-});
-
-/* ── BQM Keyboard Shortcuts ── */
-document.addEventListener('keydown', function(e) {
-    // BQM slideshow keyboard shortcuts (only when BQM view active)
-    if (currentView !== 'bqm') return;
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
-    if (e.key === ' ' || e.code === 'Space') {
-        e.preventDefault();
-        if (_bqmSlideshow.playing) pauseBqmSlideshow();
-        else startBqmSlideshow();
-    } else if (e.key === 'Escape') {
-        stopBqmSlideshow();
-    } else if (e.key === 'ArrowLeft') {
-        if (_bqmSlideshow.playing || _bqmSlideshow.range.length) {
-            e.preventDefault();
-            if (_bqmSlideshow.playing) pauseBqmSlideshow();
-            if (_bqmSlideshow.currentIdx > 0) {
-                _bqmSlideshow.currentIdx--;
-                selectBqmSlideshowFrame();
-            }
-        }
-    } else if (e.key === 'ArrowRight') {
-        if (_bqmSlideshow.playing || _bqmSlideshow.range.length) {
-            e.preventDefault();
-            if (_bqmSlideshow.playing) pauseBqmSlideshow();
-            if (_bqmSlideshow.currentIdx < _bqmSlideshow.range.length - 1) {
-                _bqmSlideshow.currentIdx++;
-                selectBqmSlideshowFrame();
-            }
-        }
-    }
+if (bqmTogglePng) bqmTogglePng.addEventListener('click', function() {
+    if (_bqmViewMode === 'png') return;
+    BQMChart.destroy('bqm-chart-container');
+    loadBqmGraph(bqmDate);
 });
 
 /* ── BQM Graph ── */
 function loadBqmGraph(date) {
     var img = document.getElementById('bqm-image');
-    var noData = document.getElementById('bqm-no-data');
-    var card = document.getElementById('bqm-card');
-    if (!img || !noData) return;
-    if (card) card.style.display = 'none';
-    noData.style.display = 'none';
+    if (!img) return;
+    setBqmViewMode('png');
+    BQMChart.destroy('bqm-chart-container');
     img.onload = function() {
-        if (card) card.style.display = 'block';
+        showBqmCard();
     };
     img.onerror = function() {
-        if (card) card.style.display = 'none';
-        noData.textContent = T.bqm_no_data || 'No BQM graph for this date.';
-        noData.style.display = 'block';
+        showBqmNoData(T.bqm_no_data || 'No BQM graph for this date.');
     };
     img.src = '/api/bqm/image/' + date;
 }
@@ -392,6 +412,47 @@ function detectDateFromFilename(filename) {
     m = base.match(/(\d{2})-(\d{2})-(\d{4})/);
     if (m) return m[3] + '-' + m[2] + '-' + m[1];
     return '';
+}
+
+/* ── CSV Bulk Import ── */
+
+function importBqmCsv() {
+    var input = document.getElementById('bqm-csv-file');
+    if (!input || !input.files.length) return;
+    var btn = document.getElementById('bqm-csv-import-btn');
+    var status = document.getElementById('bqm-csv-import-status');
+    if (btn) btn.disabled = true;
+    if (status) { status.textContent = 'Importing...'; status.className = 'bqm-csv-status'; }
+
+    var formData = new FormData();
+    formData.append('file', input.files[0]);
+
+    fetch('/api/bqm/import-csv', { method: 'POST', body: formData })
+        .then(function(r) {
+            var ct = r.headers.get('content-type') || '';
+            if (ct.indexOf('json') === -1) {
+                throw new Error('Upload failed (HTTP ' + r.status + ')');
+            }
+            return r.json();
+        })
+        .then(function(data) {
+            if (data.error) {
+                if (status) { status.textContent = data.error; status.className = 'bqm-csv-status error'; }
+            } else {
+                if (status) {
+                    status.textContent = data.parsed_rows + ' rows imported (' + data.days + ' days, ' + data.date_range.start + ' to ' + data.date_range.end + ')';
+                    status.className = 'bqm-csv-status ok';
+                }
+                fetchBqmDates(function() { renderBqmCalendar(_bqmCalYear, _bqmCalMonth); });
+            }
+        })
+        .catch(function(err) {
+            if (status) { status.textContent = 'Error: ' + err.message; status.className = 'bqm-csv-status error'; }
+        })
+        .finally(function() {
+            if (btn) btn.disabled = false;
+            if (input) input.value = '';
+        });
 }
 
 function openBqmImportModal() {
@@ -739,7 +800,11 @@ function initBqmView() {
     } else {
         renderBqmCalendar(_bqmCalYear, _bqmCalMonth);
     }
-    if (bqmDate === todayStr()) {
+    if (_bqmRangeStart && _bqmRangeEnd) {
+        loadBqmRangeChart(_bqmRangeStart, _bqmRangeEnd);
+    } else if (_bqmCsvDates.has(bqmDate)) {
+        loadBqmChart(bqmDate);
+    } else if (bqmDate === todayStr()) {
         loadBqmLive();
         startBqmLiveRefresh();
     } else {

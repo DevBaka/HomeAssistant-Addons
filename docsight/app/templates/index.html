@@ -36,6 +36,9 @@
     }
     </style>
     {% endif %}
+    {% if config.font_family == 'system' %}
+    <style id="font-override">:root { --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }</style>
+    {% endif %}
     <script src="/static/vendor/lucide.min.js"></script>
 </head>
 <body>
@@ -56,7 +59,7 @@
 </header>
 
 <!-- Sidebar -->
-<nav class="sidebar" id="sidebar">
+<nav class="sidebar" id="sidebar" aria-label="Main navigation">
     <div class="sidebar-header">
         <div class="sidebar-logo"><img src="/static/logo.svg" alt="DOCSight" width="18" height="18"></div>
         <div>
@@ -69,19 +72,19 @@
         <div class="nav-section" data-nav-section="monitoring" data-nav-label="{{ t.sidebar_monitoring }}">
             <div class="nav-group-label">{{ t.sidebar_monitoring }}</div>
             <div class="nav-section-items">
-                <a class="nav-item active" data-view="live" data-nav-icon="layout-dashboard" data-nav-title="{{ t.home }}">
+                <button class="nav-item active" data-view="live" data-nav-icon="layout-dashboard" data-nav-title="{{ t.home }}">
                     <i data-lucide="layout-dashboard"></i> {{ t.home }}
-                </a>
-                <a class="nav-item" data-view="events" data-nav-icon="bell" data-nav-title="{{ t.event_log }}">
+                </button>
+                <button class="nav-item" data-view="events" data-nav-icon="bell" data-nav-title="{{ t.event_log }}">
                     <i data-lucide="bell"></i> {{ t.event_log }}
                     <span class="nav-badge" id="event-badge" style="display:none;"></span>
-                </a>
-                <a class="nav-item" data-view="channels" data-nav-icon="layers" data-nav-title="{{ t.channels }}">
+                </button>
+                <button class="nav-item" data-view="channels" data-nav-icon="layers" data-nav-title="{{ t.channels }}">
                     <i data-lucide="layers"></i> {{ t.channels }}
-                </a>
-                <a class="nav-item" data-view="trends" data-nav-icon="trending-up" data-nav-title="{{ t.signal_trends }}">
+                </button>
+                <button class="nav-item" data-view="trends" data-nav-icon="trending-up" data-nav-title="{{ t.signal_trends }}">
                     <i data-lucide="trending-up"></i> {{ t.signal_trends }}
-                </a>
+                </button>
             </div>
         </div>
         <!-- Secondary analysis views (collapsible) -->
@@ -94,40 +97,40 @@
         {% if modules|selectattr('id', 'equalto', 'docsight.modulation')|list %}{% if analysis_items.append('modulation') %}{% endif %}{% endif %}
         {% if analysis_items %}
         <div class="nav-section nav-section-collapsible" data-nav-section="analysis" data-nav-label="{{ t.get('sidebar_analysis', 'Analysis') }}">
-            <div class="nav-group-label nav-group-toggle" onclick="toggleNavSection(this)">
+            <div class="nav-group-label nav-group-toggle" role="button" tabindex="0" aria-expanded="false" onclick="toggleNavSection(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}">
                 {{ t.get('sidebar_analysis', 'Analysis') }}
                 <i data-lucide="chevron-down" class="nav-toggle-icon"></i>
             </div>
             <div class="nav-section-items">
                 {% if speedtest_configured or bqm_configured %}
-                <a class="nav-item" data-view="correlation" data-nav-icon="bar-chart-3" data-nav-title="{{ t.correlation_analysis }}">
+                <button class="nav-item" data-view="correlation" data-nav-icon="bar-chart-3" data-nav-title="{{ t.correlation_analysis }}">
                     <i data-lucide="bar-chart-3"></i> {{ t.correlation_analysis }}
-                </a>
+                </button>
                 {% endif %}
                 {% if modules|selectattr('id', 'equalto', 'docsight.connection_monitor')|list %}
-                <a class="nav-item" data-view="connection-monitor" data-nav-icon="activity" data-nav-title="{{ t.get('docsight.connection_monitor.connection_monitor', 'Connection Monitor') }}">
-                    <i data-lucide="activity"></i> {{ t.get('docsight.connection_monitor.connection_monitor', 'Connection Monitor') }}
-                </a>
+                <button class="nav-item" data-view="connection-monitor" data-nav-icon="satellite-dish" data-nav-title="{{ t.get('docsight.connection_monitor.connection_monitor', 'Connection Monitor') }}">
+                    <i data-lucide="satellite-dish"></i> {{ t.get('docsight.connection_monitor.connection_monitor', 'Connection Monitor') }}
+                </button>
                 {% endif %}
                 {% if is_fritzbox and segment_utilization_enabled %}
-                <a class="nav-item" data-view="segment-utilization" data-nav-icon="gauge" data-nav-title="{{ t.seg_title }}">
+                <button class="nav-item" data-view="segment-utilization" data-nav-icon="gauge" data-nav-title="{{ t.seg_title }}">
                     <i data-lucide="gauge"></i> {{ t.seg_title }}
-                </a>
+                </button>
                 {% endif %}
                 {% if modules|selectattr('id', 'equalto', 'docsight.comparison')|list %}
-                <a class="nav-item" data-view="comparison" data-nav-icon="git-compare-arrows" data-nav-title="{{ t.get('docsight.comparison.title', 'Before/After Comparison') }}">
+                <button class="nav-item" data-view="comparison" data-nav-icon="git-compare-arrows" data-nav-title="{{ t.get('docsight.comparison.title', 'Before/After Comparison') }}">
                     <i data-lucide="git-compare-arrows"></i> {{ t.get('docsight.comparison.title', 'Before/After Comparison') }}
-                </a>
+                </button>
                 {% endif %}
                 {% if gaming_quality_enabled %}
-                <a class="nav-item" data-view="gaming" data-nav-icon="gamepad-2" data-nav-title="{{ t.gaming_quality_label }}">
+                <button class="nav-item" data-view="gaming" data-nav-icon="gamepad-2" data-nav-title="{{ t.gaming_quality_label }}">
                     <i data-lucide="gamepad-2"></i> {{ t.gaming_quality_label }}
-                </a>
+                </button>
                 {% endif %}
                 {% if modules|selectattr('id', 'equalto', 'docsight.modulation')|list %}
-                <a class="nav-item" data-view="modulation" data-nav-icon="bar-chart-3" data-nav-title="{{ t.get('docsight.modulation.title', 'Modulation Performance') }}">
+                <button class="nav-item" data-view="modulation" data-nav-icon="bar-chart-3" data-nav-title="{{ t.get('docsight.modulation.title', 'Modulation Performance') }}">
                     <i data-lucide="bar-chart-3"></i> {{ t.get('docsight.modulation.title', 'Modulation Performance') }}
-                </a>
+                </button>
                 {% endif %}
             </div>
         </div>
@@ -137,41 +140,41 @@
             <div class="nav-section-items">
                 {% if modules|selectattr('id', 'equalto', 'docsight.speedtest')|list %}
                 {% if speedtest_configured %}
-                <a class="nav-item" data-view="speedtest" data-nav-icon="rabbit" data-nav-title="{{ t.speedtest }}">
+                <button class="nav-item" data-view="speedtest" data-nav-icon="rabbit" data-nav-title="{{ t.speedtest }}">
                     <i data-lucide="rabbit"></i> {{ t.speedtest }}
-                </a>
+                </button>
                 {% else %}
-                <a class="nav-item" onclick="openSpeedtestSetupModal()">
+                <button class="nav-item" onclick="openSpeedtestSetupModal()">
                     <i data-lucide="settings"></i> {{ t.speedtest_setup }}
-                </a>
+                </button>
                 {% endif %}
                 {% endif %}
                 {% if modules|selectattr('id', 'equalto', 'docsight.bqm')|list %}
                 {% if bqm_configured %}
-                <a class="nav-item" data-view="bqm" data-nav-icon="chart-spline" data-nav-title="{{ t.bqm_title }}">
+                <button class="nav-item" data-view="bqm" data-nav-icon="chart-spline" data-nav-title="{{ t.bqm_title }}">
                     <i data-lucide="chart-spline"></i> {{ t.bqm_title }}
-                </a>
+                </button>
                 {% else %}
-                <a class="nav-item" onclick="openBqmSetupModal()">
+                <button class="nav-item" onclick="openBqmSetupModal()">
                     <i data-lucide="settings"></i> {{ t.bqm_setup }}
-                </a>
+                </button>
                 {% endif %}
                 {% endif %}
                 {% if modules|selectattr('id', 'equalto', 'docsight.smokeping')|list %}
                 {% if smokeping_configured %}
-                <a class="nav-item" data-view="smokeping" data-nav-icon="radar" data-nav-title="{{ t.smokeping_title }}">
+                <button class="nav-item" data-view="smokeping" data-nav-icon="radar" data-nav-title="{{ t.smokeping_title }}">
                     <i data-lucide="radar"></i> {{ t.smokeping_title }}
-                </a>
+                </button>
                 {% else %}
-                <a class="nav-item" onclick="openSmokepingSetupModal()">
+                <button class="nav-item" onclick="openSmokepingSetupModal()">
                     <i data-lucide="settings"></i> {{ t.smokeping_setup }}
-                </a>
+                </button>
                 {% endif %}
                 {% endif %}
                 {% if bnetz_enabled and modules|selectattr('id', 'equalto', 'docsight.bnetz')|list %}
-                <a class="nav-item" data-view="bnetz" data-nav-icon="file-check" data-nav-title="{{ t.bnetz_title }}">
+                <button class="nav-item" data-view="bnetz" data-nav-icon="file-check" data-nav-title="{{ t.bnetz_title }}">
                     <i data-lucide="file-check"></i> {{ t.bnetz_title }}
-                </a>
+                </button>
                 {% endif %}
             </div>
         </div>
@@ -179,17 +182,17 @@
             <div class="nav-group-label">{{ t.sidebar_documentation }}</div>
             <div class="nav-section-items">
                 {% if modules|selectattr('id', 'equalto', 'docsight.journal')|list %}
-                <a class="nav-item" data-view="journal" data-nav-icon="clipboard-list" data-nav-title="{{ t.incident_journal }}">
+                <button class="nav-item" data-view="journal" data-nav-icon="clipboard-list" data-nav-title="{{ t.incident_journal }}">
                     <i data-lucide="clipboard-list"></i> {{ t.incident_journal }}
-                </a>
+                </button>
                 {% endif %}
-                <a class="nav-item" id="export-link" href="javascript:void(0)" onclick="exportForLLM()">
+                <button class="nav-item" id="export-link" onclick="exportForLLM()">
                     <i data-lucide="file-output"></i> {{ t.export_llm }}
-                </a>
+                </button>
                 {% if modules|selectattr('id', 'equalto', 'docsight.reports')|list %}
-                <a class="nav-item" id="report-link" href="javascript:void(0)" onclick="openReportModal()">
+                <button class="nav-item" id="report-link" onclick="openReportModal()">
                     <i data-lucide="file-text"></i> {{ t.incident_report }}
-                </a>
+                </button>
                 {% endif %}
             </div>
         </div>
@@ -202,10 +205,10 @@
             <div class="nav-group-label">{{ t.sidebar_extensions }}</div>
             <div class="nav-section-items">
                 {% for mod in tab_modules|sort(attribute='menu.order') %}
-                <a class="nav-item" data-view="mod-{{ mod.id|replace('.', '-') }}" data-nav-icon="{{ mod.menu.get('icon', 'puzzle') }}" data-nav-title="{{ t.get(mod.menu.label_key, mod.name) }}">
+                <button class="nav-item" data-view="mod-{{ mod.id|replace('.', '-') }}" data-nav-icon="{{ mod.menu.get('icon', 'puzzle') }}" data-nav-title="{{ t.get(mod.menu.label_key, mod.name) }}">
                     <i data-lucide="{{ mod.menu.get('icon', 'puzzle') }}"></i>
                     {{ t.get(mod.menu.label_key, mod.name) }}
-                </a>
+                </button>
                 {% endfor %}
             </div>
         </div>
@@ -213,6 +216,9 @@
         <div style="flex:1;"></div>
         <a class="nav-item" href="/settings">
             <i data-lucide="settings"></i> {{ t.settings }}
+        </a>
+        <a class="nav-item" href="/settings#support">
+            <i data-lucide="heart-handshake"></i> {{ t.get('support_nav', 'Support') }}
         </a>
         {% if auth_enabled %}
         <a class="nav-item" href="/logout">
@@ -246,7 +252,7 @@
 <div class="backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
 
 <!-- Main Area -->
-<div class="app-main">
+<main class="app-main">
 
 <!-- ═══ View: Dashboard ═══ -->
 <div class="main-content">
@@ -573,9 +579,9 @@
         {# ── Connection Monitor card (inline with other metric cards) ── #}
         {% if modules|selectattr('id', 'equalto', 'docsight.connection_monitor')|list %}
         <div class="metric-card glass" id="connection-monitor-card" style="cursor:pointer;" onclick="switchView('connection-monitor')">
-            <div class="metric-label">
-                <i data-lucide="activity" style="width:14px;height:14px;"></i>
-                {{ t.get('docsight.connection_monitor.connection_monitor', 'Connection Monitor') }}
+            <div class="metric-header">
+                <span class="metric-label">{{ t.get('docsight.connection_monitor.connection_monitor', 'Connection Monitor') }}</span>
+                <div class="metric-icon blue"><i data-lucide="satellite-dish"></i></div>
             </div>
             <div class="metric-value" id="cm-card-status">&mdash;</div>
             <div class="metric-sub" id="cm-card-details"></div>
@@ -671,7 +677,7 @@
 
         {% for group in ds|groupby('docsis_version')|reverse %}
         <div class="docsis-group">
-            <div class="docsis-group-header" onclick="if(!event.target.closest('.glossary-hint'))this.parentElement.classList.toggle('open')">
+            <div class="docsis-group-header" role="button" tabindex="0" onclick="if(!event.target.closest('.glossary-hint'))this.parentElement.classList.toggle('open')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}">
                 <i data-lucide="chevron-right"></i>
                 DOCSIS {{ group.grouper }} {{ 'OFDM' if group.grouper == '3.1' else 'SC-QAM' }} <span class="glossary-hint"><i data-lucide="info"></i><div class="glossary-popover">{{ t.glossary_ofdm if group.grouper == '3.1' else t.glossary_scqam }}</div></span> · {{ group.list|length }} {{ t.channel if group.list|length == 1 else t.channels }}
             </div>
@@ -729,7 +735,7 @@
 
         {% for group in us|groupby('docsis_version')|reverse %}
         <div class="docsis-group">
-            <div class="docsis-group-header" onclick="if(!event.target.closest('.glossary-hint'))this.parentElement.classList.toggle('open')">
+            <div class="docsis-group-header" role="button" tabindex="0" onclick="if(!event.target.closest('.glossary-hint'))this.parentElement.classList.toggle('open')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}">
                 <i data-lucide="chevron-right"></i>
                 DOCSIS {{ group.grouper }} {{ 'OFDMA' if group.grouper == '3.1' else 'SC-QAM' }} <span class="glossary-hint"><i data-lucide="info"></i><div class="glossary-popover">{{ t.glossary_ofdm if group.grouper == '3.1' else t.glossary_scqam }}</div></span> · {{ group.list|length }} {{ t.channel if group.list|length == 1 else t.channels }}
             </div>
@@ -926,6 +932,8 @@
     <div id="bqm-toolbar" class="bqm-toolbar">
         <button class="trend-tab bqm-quick" id="bqm-today-btn">{{ t.bqm_today }}</button>
         <button class="trend-tab bqm-quick" id="bqm-yesterday-btn">{{ t.bqm_yesterday }}</button>
+        <button class="trend-tab bqm-quick" id="bqm-7d-btn">{{ t.bqm_range_7d or '7d' }}</button>
+        <button class="trend-tab bqm-quick" id="bqm-30d-btn">{{ t.bqm_range_30d or '30d' }}</button>
         <div class="bqm-month-nav">
             <button id="bqm-month-prev" class="bqm-nav-btn">&#8249;</button>
             <span id="bqm-month-label" class="bqm-month-label"></span>
@@ -934,6 +942,11 @@
         <button class="bqm-nav-btn bqm-import-btn" onclick="openBqmImportModal()" title="{{ t.bqm_import_title }}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="display:block;">
                 <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+        </button>
+        <button class="bqm-nav-btn bqm-import-btn" onclick="var s=document.getElementById('bqm-csv-import-section');s.style.display=s.style.display==='none'?'':'none'" title="{{ t.get('bqm_csv_import', 'Import CSV') }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="display:block;">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
             </svg>
         </button>
         <button class="bqm-nav-btn bqm-import-btn bqm-delete-btn" onclick="deleteBqmImages()" title="{{ t.bqm_delete }}">
@@ -949,22 +962,7 @@
         </div>
         <div id="bqm-calendar-grid" class="bqm-calendar-grid"></div>
     </div>
-    <!-- Slideshow controls -->
-    <div id="bqm-slideshow-controls" class="bqm-slideshow-controls">
-        <button id="bqm-play-btn" class="bqm-ctrl-btn" title="{{ t.bqm_play }}">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><polygon points="6,4 20,12 6,20"/></svg>
-        </button>
-        <button id="bqm-stop-btn" class="bqm-ctrl-btn" title="{{ t.bqm_stop }}" style="display:none;">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
-        </button>
-        <div class="bqm-speed-tabs" id="bqm-speed-tabs">
-            <span class="bqm-speed-label">{{ t.bqm_speed }}:</span>
-            <button class="trend-tab" data-speed="1000">1s</button>
-            <button class="trend-tab active" data-speed="2000">2s</button>
-            <button class="trend-tab" data-speed="5000">5s</button>
-        </div>
-        <span id="bqm-range-label" class="bqm-range-label"></span>
-    </div>
+    <span id="bqm-range-label" class="bqm-range-label"></span>
     <div id="bqm-content">
         <div id="bqm-card" class="bqm-card" style="display:none;">
             <div class="chart-card-header">
@@ -977,7 +975,12 @@
                     <span id="bqm-live-badge" class="bqm-live-badge" style="display:none;">{{ t.bqm_live }}</span>
                     <span id="bqm-last-updated" class="bqm-last-updated" style="display:none;"></span>
                 </div>
+                <div id="bqm-view-toggle" class="trend-tabs" style="display:none;">
+                    <button class="trend-tab active" id="bqm-toggle-uplot">uPlot</button>
+                    <button class="trend-tab" id="bqm-toggle-png">PNG</button>
+                </div>
             </div>
+            <div id="bqm-chart-container" class="bqm-chart-container" style="display:none;"></div>
             <div id="bqm-image-wrap" style="text-align:center;">
                 <img id="bqm-image" style="max-width:100%; border-radius:8px;" alt="BQM Graph">
             </div>
@@ -988,10 +991,10 @@
 {% endif %}
 
 <!-- ═══ BQM Import Modal ═══ -->
-<div class="modal-overlay" id="bqm-import-modal" onclick="if(event.target===this)closeBqmImportModal()">
+<div class="modal-overlay" id="bqm-import-modal" role="dialog" aria-modal="true" aria-labelledby="bqm-import-modal-title" onclick="if(event.target===this)closeBqmImportModal()">
     <div class="modal" style="max-width:800px;">
         <div class="modal-header">
-            <h2>{{ t.bqm_import_title }}</h2>
+            <h2 id="bqm-import-modal-title">{{ t.bqm_import_title }}</h2>
             <button class="modal-close" onclick="closeBqmImportModal()">&times;</button>
         </div>
         <div class="modal-body" style="overflow-y:auto;">
@@ -1046,6 +1049,15 @@
     </div>
 </div>
 
+<!-- BQM CSV Import (inline, below calendar) -->
+<div id="bqm-csv-import-section" class="bqm-csv-import" style="display:none; margin:16px auto; max-width:480px; text-align:center;">
+    <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:center;">
+        <input type="file" id="bqm-csv-file" accept=".csv" style="font-size:0.85em;">
+        <button class="btn btn-primary btn-sm" id="bqm-csv-import-btn" onclick="importBqmCsv()">{{ t.get('bqm_csv_import', 'Import CSV') }}</button>
+    </div>
+    <div id="bqm-csv-import-status" class="bqm-csv-status" style="margin-top:8px; font-size:0.85em;"></div>
+</div>
+
 <!-- ═══ View: Smokeping Graphs ═══ -->
 {% if modules|selectattr('id', 'equalto', 'docsight.smokeping')|list and smokeping_configured %}
 <div id="view-smokeping" class="view">
@@ -1067,15 +1079,17 @@
 <!-- ═══ View: Correlation Analysis ═══ -->
 {% if speedtest_configured or bqm_configured %}
 <div id="view-correlation" class="view">
-    <div class="trend-header">
-        <span class="trend-title">{{ t.correlation_title }}</span>
+    <div class="correlation-header">
+        <div class="correlation-header-left">
+            <span class="correlation-view-title">{{ t.correlation_title }}</span>
+            <span class="correlation-view-subtitle">{{ t.get('correlation_subtitle', 'Build evidence for ISP complaints') }}</span>
+        </div>
         <div class="trend-tabs" id="correlation-tabs">
             <button class="trend-tab active" data-value="24" onclick="selectPill(this, loadCorrelationData)">{{ t.correlation_hours_24 }}</button>
             <button class="trend-tab" data-value="48" onclick="selectPill(this, loadCorrelationData)">{{ t.correlation_hours_48 }}</button>
             <button class="trend-tab" data-value="168" onclick="selectPill(this, loadCorrelationData)">{{ t.correlation_hours_168 }}</button>
         </div>
     </div>
-    <p class="correlation-desc" style="color:var(--muted); font-size:0.85em; margin:0 0 16px;">{{ t.correlation_desc }}</p>
 
     <div id="correlation-loading" class="waiting" style="display:none;">
         <div class="skeleton skel-chart"></div>
@@ -1098,20 +1112,20 @@
                 </div>
                 <div class="chart-export-buttons">
                     <button class="chart-export-btn" onclick="_corrExportPNG()" title="{{ t.chart_export_png }}">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         PNG
                     </button>
                     <button class="chart-export-btn" onclick="_corrExportCSV()" title="{{ t.chart_export_csv }}">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         CSV
                     </button>
                 </div>
             </div>
             <div class="correlation-chart-wrap">
                 <canvas id="correlation-chart"></canvas>
-                <canvas id="correlation-overlay" class="correlation-overlay"></canvas>
+                <canvas id="correlation-overlay" class="correlation-overlay" role="img" aria-label="Signal correlation chart"></canvas>
                 <div class="correlation-tooltip" id="correlation-tooltip"></div>
-                <div class="correlation-zoom-reset" id="correlation-zoom-reset" style="display:none;" onclick="_corrResetZoom()">{{ t.chart_reset_zoom }}</div>
+                <button type="button" class="correlation-zoom-reset" id="correlation-zoom-reset" style="display:none;" onclick="_corrResetZoom()">{{ t.chart_reset_zoom }}</button>
                 <div class="correlation-chart-legend" id="correlation-legend"></div>
             </div>
         </div>
@@ -1121,9 +1135,8 @@
     <div id="correlation-table-card" class="table-card" style="display:none;">
         <div class="table-card-header">
             <div class="table-card-title">
-                <svg class="table-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                    <polyline points="9 22 9 12 15 12 15 22"/>
+                <svg class="table-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
                 </svg>
                 <span>{{ t.correlation_timeline }}</span>
             </div>
@@ -1281,12 +1294,12 @@
     <div class="events-filter-section">
         <div class="events-filter-label">{{ t.event_severity }}:</div>
         <div class="events-severity-pills">
-            <button class="severity-pill active" data-severity="" onclick="filterEventsBySeverity('')">{{ t.event_all_severities }}</button>
-            <button class="severity-pill" data-severity="info" onclick="filterEventsBySeverity('info')">{{ t.event_severity_info }}</button>
-            <button class="severity-pill" data-severity="warning" onclick="filterEventsBySeverity('warning')">{{ t.event_severity_warning }}</button>
-            <button class="severity-pill" data-severity="critical" onclick="filterEventsBySeverity('critical')">{{ t.event_severity_critical }}</button>
+            <button class="severity-pill active" data-severity="" onclick="filterEventsBySeverity('')" aria-pressed="true">{{ t.event_all_severities }}</button>
+            <button class="severity-pill" data-severity="info" onclick="filterEventsBySeverity('info')" aria-pressed="false">{{ t.event_severity_info }}</button>
+            <button class="severity-pill" data-severity="warning" onclick="filterEventsBySeverity('warning')" aria-pressed="false">{{ t.event_severity_warning }}</button>
+            <button class="severity-pill" data-severity="critical" onclick="filterEventsBySeverity('critical')" aria-pressed="false">{{ t.event_severity_critical }}</button>
             <span style="border-left:1px solid var(--card-border, rgba(255,255,255,0.08)); height:20px; margin:0 8px;"></span>
-            <button class="severity-pill active" id="hide-operational-btn" onclick="toggleHideOperational()">{{ t.event_hide_operational }}</button>
+            <button class="severity-pill active" id="hide-operational-btn" onclick="toggleHideOperational()" aria-pressed="true">{{ t.event_hide_operational }}</button>
         </div>
     </div>
     
@@ -1311,11 +1324,11 @@
         </div>
         <table id="events-table">
             <thead><tr>
-                <th>{{ t.timestamp }}</th>
-                <th>{{ t.event_severity }}</th>
-                <th>{{ t.event_type }}</th>
-                <th>{{ t.event_message }}</th>
-                <th></th>
+                <th scope="col">{{ t.timestamp }}</th>
+                <th scope="col">{{ t.event_severity }}</th>
+                <th scope="col">{{ t.event_type }}</th>
+                <th scope="col">{{ t.event_message }}</th>
+                <th scope="col"></th>
             </tr></thead>
             <tbody id="events-tbody"></tbody>
         </table>
@@ -1328,10 +1341,7 @@
 
 <!-- ═══ View: Channel Timeline ═══ -->
 <div id="view-channels" class="view">
-    <div class="trend-header" style="margin-bottom:12px;">
-        <span class="trend-title">{{ t.channels }}</span>
-    </div>
-    <div style="display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap; align-items:center;">
+    <div class="ch-controls">
         <div class="trend-tabs" id="channel-mode-tabs">
             <button class="trend-tab active" data-value="timeline" onclick="selectPill(this, switchChannelMode)">{{ t.channel_timeline }}</button>
             <button class="trend-tab" data-value="compare" onclick="selectPill(this, switchChannelMode)">{{ t.channel_compare }}</button>
@@ -1365,12 +1375,22 @@
         </span>
     </div>
 
+    <!-- Channel info bar (populated by JS after channel selection) -->
+    <div id="channel-info-bar" class="ch-info-bar" style="display:none;"></div>
+
     <!-- ── Timeline Sub-View ── -->
     <div id="channel-panel-timeline">
         <div id="channel-loading" class="waiting" style="display:none;">
             <div class="skeleton skel-chart"></div>
         </div>
-        <div id="channel-empty" class="events-empty" style="display:none;"></div>
+        <div id="channel-empty" class="ch-onboarding" style="display:none;">
+            <i data-lucide="layers"></i>
+            <div class="ch-onboarding-text">
+                <strong>{{ t.get('channel_onboarding_title', 'Channel Timeline') }}</strong>
+                <span>{{ t.get('channel_onboarding_desc', 'Select a channel from the dropdown to view its signal history over time.') }}</span>
+            </div>
+        </div>
+        <div id="channel-no-data" class="no-data-msg" style="display:none;"></div>
         <div id="channel-charts" class="charts-grid" style="display:none;">
             <div class="chart-card">
                 <div class="chart-card-header">
@@ -1398,7 +1418,7 @@
                 </div>
                 <canvas id="chart-ch-errors"></canvas>
             </div>
-            <div class="chart-card" id="channel-modulation-card">
+            <div class="chart-card ch-full-width" id="channel-modulation-card">
                 <div class="chart-card-header">
                     <div class="chart-header-content">
                         <svg class="chart-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1478,7 +1498,7 @@
 </div>
 
 <!-- ═══ Entry Modal ═══ -->
-<div class="modal-overlay" id="entry-modal" onclick="if(event.target===this)closeEntryModal()">
+<div class="modal-overlay" id="entry-modal" role="dialog" aria-modal="true" aria-labelledby="entry-modal-title" onclick="if(event.target===this)closeEntryModal()">
     <div class="modal" style="max-width:640px;">
         <div class="modal-header">
             <div style="display:flex;align-items:center;gap:10px;">
@@ -1537,7 +1557,7 @@
 </div>
 
 <!-- ═══ Incident Container Modal ═══ -->
-<div class="modal-overlay" id="incident-container-modal" onclick="if(event.target===this)closeIncidentModal()">
+<div class="modal-overlay" id="incident-container-modal" role="dialog" aria-modal="true" aria-labelledby="incident-container-modal-title" onclick="if(event.target===this)closeIncidentModal()">
     <div class="modal incident-container-modal" style="max-width:560px;">
         <div class="modal-header">
             <h2 id="incident-container-modal-title"></h2>
@@ -1594,10 +1614,10 @@
 </div>
 
 <!-- ═══ Import Modal ═══ -->
-<div class="modal-overlay" id="import-modal" onclick="if(event.target===this)closeImportModal()">
+<div class="modal-overlay" id="import-modal" role="dialog" aria-modal="true" aria-labelledby="import-modal-title" onclick="if(event.target===this)closeImportModal()">
     <div class="modal" style="max-width:900px;">
         <div class="modal-header">
-            <h2>{{ t.import_incidents }}</h2>
+            <h2 id="import-modal-title">{{ t.import_incidents }}</h2>
             <button class="modal-close" onclick="closeImportModal()">&times;</button>
         </div>
         <div class="modal-body" style="overflow-y:auto;">
@@ -1655,7 +1675,7 @@
 <div id="view-speedtest" class="view">
     <div class="trend-header">
         <span class="trend-title">{{ t.speedtest_tracker }}</span>
-        <div style="display:flex; gap:8px; align-items:center;">
+        <div class="speedtest-controls">
             <div class="trend-tabs" id="speedtest-tabs">
                 <button class="trend-tab" data-value="1" onclick="selectPill(this, filterSpeedtestData)">1d</button>
                 <button class="trend-tab active" data-value="7" onclick="selectPill(this, filterSpeedtestData)">7d</button>
@@ -1664,13 +1684,19 @@
                 <button class="trend-tab" data-value="90" onclick="selectPill(this, filterSpeedtestData)">90d</button>
                 <button class="trend-tab" data-value="all" onclick="selectPill(this, filterSpeedtestData)">{{ t.fetch_all }}</button>
             </div>
+            {% if not demo_mode %}<button class="btn btn-primary btn-sm" id="speedtest-run-btn" onclick="runSpeedtest()"><i data-lucide="play"></i> {{ t.run_speedtest }}</button>{% endif %}
             <button class="refresh-btn" id="speedtest-refresh-btn" title="{{ t.refresh }}" onclick="loadSpeedtestHistory()"><i data-lucide="refresh-cw"></i></button>
         </div>
     </div>
     <div id="speedtest-loading" class="waiting" style="display:none;">
         <div class="skeleton skel-chart"></div>
     </div>
-    <div id="speedtest-no-data" class="no-data-msg" style="display:none;"></div>
+    <div id="speedtest-no-data" class="no-data-msg speedtest-empty-state" style="display:none;">
+        <i data-lucide="wifi-off" style="width:40px;height:40px;color:var(--text-muted);margin-bottom:12px;"></i>
+        <div class="speedtest-empty-title">{{ t.speedtest_empty_title or 'No speedtest results yet' }}</div>
+        <div class="speedtest-empty-desc">{{ t.speedtest_empty_desc or 'Automated tests will appear here once the schedule runs. You can also start a manual test.' }}</div>
+        {% if not demo_mode %}<button class="btn btn-primary btn-sm" onclick="runSpeedtest()" style="margin-top:12px;"><i data-lucide="play"></i> {{ t.run_speedtest }}</button>{% endif %}
+    </div>
     <div id="speedtest-chart-container" style="display:none;">
         <!-- Phase 4.2: Modern card wrapper for speedtest chart -->
         <div class="speedtest-chart-card">
@@ -1707,6 +1733,7 @@
                 <th data-col="ping_ms">{{ t.ping }}<span class="sort-indicator"></span></th>
                 <th data-col="jitter_ms">{{ t.jitter }}<span class="sort-indicator"></span></th>
                 <th data-col="packet_loss_pct">{{ t.packet_loss }}<span class="sort-indicator"></span></th>
+                <th class="st-sc-col"></th>
             </tr></thead>
             <tbody id="speedtest-tbody"></tbody>
         </table>
@@ -1719,13 +1746,12 @@
 
 {% if gaming_quality_enabled %}
 <div id="view-gaming" class="view">
-    <div class="trend-header">
-        <span class="trend-title">{{ t.gaming_quality_label }}</span>
-    </div>
     {% if gaming_index %}
+    {% set s = gaming_index.score %}
+    {% set g = gaming_index.grade|lower %}
+    <!-- Gauge hero (no title - sidebar already names this view) -->
     <div class="gaming-overview">
         <div class="gaming-gauge">
-            {% set s = gaming_index.score %}
             <div class="gaming-gauge-band">
                 <div class="gaming-gauge-segment gauge-f"><span>F</span></div>
                 <div class="gaming-gauge-segment gauge-d"><span>D</span></div>
@@ -1740,62 +1766,73 @@
                 </div>
             </div>
             {% if not gaming_index.has_speedtest %}
-            <p class="gaming-no-speedtest-hint"><i data-lucide="info" style="width:14px;height:14px;vertical-align:-2px;"></i> {{ t.gaming_no_speedtest_detail }}</p>
+            <p class="gaming-no-speedtest-hint"><i data-lucide="info"></i> {{ t.gaming_no_speedtest_detail }}</p>
             {% endif %}
         </div>
-        <div class="gaming-grade-big gaming-{{ gaming_index.grade|lower }}">
+        <div class="gaming-grade-big gaming-{{ g }}">
             <span class="gaming-grade-letter">{{ gaming_index.grade }}</span>
-            <span class="gaming-grade-text">{{ t['gaming_grade_' ~ gaming_index.grade|lower] }}</span>
+            <span class="gaming-grade-text">{{ t['gaming_grade_' ~ g] }}</span>
         </div>
     </div>
+
+    <!-- Compact score breakdown (collapsed descriptions) -->
     <div class="gaming-components">
         <h3 class="gaming-section-title">{{ t.gaming_components_title }}</h3>
+        <div class="gaming-comp-grid">
         {% for key, comp in gaming_index.components.items()|sort(attribute='1.weight', reverse=true) %}
-        <div class="gaming-component-card">
-            <div class="gaming-comp-header">
+            <div class="gaming-comp-row" tabindex="0" role="button" aria-expanded="false" onclick="this.classList.toggle('open');this.setAttribute('aria-expanded',this.classList.contains('open'))" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}">
                 <span class="gaming-comp-icon">
-                    {% if key == 'latency' %}<i data-lucide="timer" style="width:16px;height:16px;"></i>
-                    {% elif key == 'jitter' %}<i data-lucide="waves" style="width:16px;height:16px;"></i>
-                    {% elif key == 'packet_loss' %}<i data-lucide="package-x" style="width:16px;height:16px;"></i>
-                    {% elif key == 'docsis_health' %}<i data-lucide="heart-pulse" style="width:16px;height:16px;"></i>
-                    {% elif key == 'snr_headroom' %}<i data-lucide="signal" style="width:16px;height:16px;"></i>
+                    {% if key == 'latency' %}<i data-lucide="timer"></i>
+                    {% elif key == 'jitter' %}<i data-lucide="waves"></i>
+                    {% elif key == 'packet_loss' %}<i data-lucide="package-x"></i>
+                    {% elif key == 'docsis_health' %}<i data-lucide="heart-pulse"></i>
+                    {% elif key == 'snr_headroom' %}<i data-lucide="signal"></i>
                     {% endif %}
                 </span>
                 <span class="gaming-comp-name">{{ t['gaming_comp_' ~ key] }}</span>
                 <span class="gaming-comp-weight">{{ comp.weight }}%</span>
+                <div class="gaming-comp-bar-inline">
+                    <div class="gaming-comp-fill {% if comp.score >= 80 %}fill-good{% elif comp.score >= 50 %}fill-warn{% else %}fill-crit{% endif %}" style="width:{{ comp.score }}%;"></div>
+                </div>
                 <span class="gaming-comp-score {% if comp.score >= 80 %}score-good{% elif comp.score >= 50 %}score-warn{% else %}score-crit{% endif %}">{{ comp.score }}</span>
-            </div>
-            <div class="gaming-comp-bar">
-                <div class="gaming-comp-fill {% if comp.score >= 80 %}fill-good{% elif comp.score >= 50 %}fill-warn{% else %}fill-crit{% endif %}" style="width:{{ comp.score }}%;"></div>
+                <i data-lucide="chevron-down" class="gaming-comp-chevron"></i>
             </div>
             <p class="gaming-comp-detail">{{ t['gaming_comp_' ~ key ~ '_detail'] }}</p>
-        </div>
         {% endfor %}
+        </div>
     </div>
+
+    <!-- Game compatibility (collapsed when all green) -->
     <div class="gaming-genres">
         <h3 class="gaming-section-title">{{ t.gaming_genres_title }}</h3>
-        {% set g = gaming_index.grade|lower %}
-        <div class="gaming-genre-cards">
-            <div class="gaming-genre-card {% if g in ['a'] %}genre-ok{% elif g in ['b'] %}genre-ok{% elif g in ['c'] %}genre-warn{% else %}genre-bad{% endif %}">
-                <span class="gaming-genre-icon"><i data-lucide="crosshair" style="width:18px;height:18px;"></i></span>
+        {% set all_ok = g in ['a', 'b'] %}
+        {% if all_ok %}
+        <div class="gaming-genres-summary genre-ok">
+            <i data-lucide="check-circle"></i>
+            <span>{{ t.get('gaming_genres_all_ok', 'All game genres: Excellent connection for all types of online gaming.') }}</span>
+        </div>
+        {% endif %}
+        <div class="gaming-genre-cards {% if all_ok %}gaming-genres-collapsed{% endif %}">
+            <div class="gaming-genre-card {% if g in ['a', 'b'] %}genre-ok{% elif g in ['c'] %}genre-warn{% else %}genre-bad{% endif %}">
+                <span class="gaming-genre-icon"><i data-lucide="crosshair"></i></span>
                 <span class="gaming-genre-name">{{ t.gaming_genre_fps }}</span>
                 <span class="gaming-genre-examples">CS2, Valorant, Fortnite</span>
                 <span class="gaming-genre-verdict">{{ t['gaming_genre_fps_' ~ g] }}</span>
             </div>
-            <div class="gaming-genre-card {% if g in ['a', 'b'] %}genre-ok{% elif g in ['c'] %}genre-ok{% else %}genre-bad{% endif %}">
-                <span class="gaming-genre-icon"><i data-lucide="swords" style="width:18px;height:18px;"></i></span>
+            <div class="gaming-genre-card {% if g in ['a', 'b', 'c'] %}genre-ok{% else %}genre-bad{% endif %}">
+                <span class="gaming-genre-icon"><i data-lucide="swords"></i></span>
                 <span class="gaming-genre-name">{{ t.gaming_genre_moba }}</span>
                 <span class="gaming-genre-examples">LoL, Dota 2, HotS</span>
                 <span class="gaming-genre-verdict">{{ t['gaming_genre_moba_' ~ g] }}</span>
             </div>
-            <div class="gaming-genre-card {% if g in ['a', 'b'] %}genre-ok{% elif g in ['c', 'd'] %}genre-ok{% else %}genre-bad{% endif %}">
-                <span class="gaming-genre-icon"><i data-lucide="globe" style="width:18px;height:18px;"></i></span>
+            <div class="gaming-genre-card {% if g in ['a', 'b', 'c', 'd'] %}genre-ok{% else %}genre-bad{% endif %}">
+                <span class="gaming-genre-icon"><i data-lucide="globe"></i></span>
                 <span class="gaming-genre-name">{{ t.gaming_genre_mmo }}</span>
                 <span class="gaming-genre-examples">WoW, FFXIV, GW2</span>
                 <span class="gaming-genre-verdict">{{ t['gaming_genre_mmo_' ~ g] }}</span>
             </div>
             <div class="gaming-genre-card {% if g in ['a', 'b', 'c'] %}genre-ok{% elif g in ['d'] %}genre-warn{% else %}genre-bad{% endif %}">
-                <span class="gaming-genre-icon"><i data-lucide="crown" style="width:18px;height:18px;"></i></span>
+                <span class="gaming-genre-icon"><i data-lucide="crown"></i></span>
                 <span class="gaming-genre-name">{{ t.gaming_genre_strategy }}</span>
                 <span class="gaming-genre-examples">Civilization, AoE, Chess</span>
                 <span class="gaming-genre-verdict">{{ t['gaming_genre_strategy_' ~ g] }}</span>
@@ -1866,14 +1903,14 @@
 {% endfor %}
 
 </div><!-- /main-content -->
-</div><!-- /app-main -->
+</main><!-- /app-main -->
 </div><!-- /app-layout -->
 
 <!-- Speedtest Setup Modal -->
-<div class="modal-overlay" id="speedtest-setup-modal" onclick="if(event.target===this)closeSpeedtestSetupModal()">
+<div class="modal-overlay" id="speedtest-setup-modal" role="dialog" aria-modal="true" aria-labelledby="speedtest-setup-modal-title" onclick="if(event.target===this)closeSpeedtestSetupModal()">
     <div class="modal">
         <div class="modal-header">
-            <h2>&#9889; {{ t.speedtest_setup_title }}</h2>
+            <h2 id="speedtest-setup-modal-title">&#9889; {{ t.speedtest_setup_title }}</h2>
             <button class="modal-close" onclick="closeSpeedtestSetupModal()">&times;</button>
         </div>
         <div class="modal-body" style="padding: 10px 0; font-size: 0.9em; line-height: 1.6;">
@@ -1903,10 +1940,10 @@
 </div>
 
 <!-- BQM Setup Modal -->
-<div class="modal-overlay" id="bqm-setup-modal" onclick="if(event.target===this)closeBqmSetupModal()">
+<div class="modal-overlay" id="bqm-setup-modal" role="dialog" aria-modal="true" aria-labelledby="bqm-setup-modal-title" onclick="if(event.target===this)closeBqmSetupModal()">
     <div class="modal">
         <div class="modal-header">
-            <h2>&#128200; {{ t.bqm_setup_title }}</h2>
+            <h2 id="bqm-setup-modal-title">&#128200; {{ t.bqm_setup_title }}</h2>
             <button class="modal-close" onclick="closeBqmSetupModal()">&times;</button>
         </div>
         <div class="modal-body" style="padding: 10px 0; font-size: 0.9em; line-height: 1.6;">
@@ -1938,10 +1975,10 @@
 
 <!-- Smokeping Setup Modal -->
 {% if modules|selectattr('id', 'equalto', 'docsight.smokeping')|list %}
-<div class="modal-overlay" id="smokeping-setup-modal" onclick="if(event.target===this)closeSmokepingSetupModal()">
+<div class="modal-overlay" id="smokeping-setup-modal" role="dialog" aria-modal="true" aria-labelledby="smokeping-setup-modal-title" onclick="if(event.target===this)closeSmokepingSetupModal()">
     <div class="modal">
         <div class="modal-header">
-            <h2>&#128225; {{ t.smokeping_setup_title }}</h2>
+            <h2 id="smokeping-setup-modal-title">&#128225; {{ t.smokeping_setup_title }}</h2>
             <button class="modal-close" onclick="closeSmokepingSetupModal()">&times;</button>
         </div>
         <div class="modal-body" style="padding: 10px 0; font-size: 0.9em; line-height: 1.6;">
@@ -1964,10 +2001,10 @@
 {% endif %}
 
 <!-- Report Modal -->
-<div class="modal-overlay" id="report-modal" onclick="if(event.target===this)closeReportModal()">
+<div class="modal-overlay" id="report-modal" role="dialog" aria-modal="true" aria-labelledby="report-modal-title" onclick="if(event.target===this)closeReportModal()">
     <div class="modal" style="max-width:800px;">
         <div class="modal-header">
-            <h2>{{ t.incident_report }}</h2>
+            <h2 id="report-modal-title">{{ t.incident_report }}</h2>
             <button class="modal-close" onclick="closeReportModal()">&times;</button>
         </div>
         <p class="modal-hint">{{ t.report_description }}</p>
@@ -2035,7 +2072,7 @@
 </div>
 
 <!-- Chart Zoom Modal -->
-<div class="chart-zoom-overlay" id="chart-zoom-overlay" onclick="if(event.target===this)closeChartZoom()">
+<div class="chart-zoom-overlay" id="chart-zoom-overlay" role="dialog" aria-modal="true" aria-labelledby="chart-zoom-title" onclick="if(event.target===this)closeChartZoom()">
     <div class="chart-zoom-modal">
         <div class="modal-header">
             <h2 id="chart-zoom-title"></h2>
@@ -2046,21 +2083,23 @@
 </div>
 
 <!-- Export Modal -->
-<div class="modal-overlay" id="export-modal">
+<div class="modal-overlay" id="export-modal" role="dialog" aria-modal="true" aria-labelledby="export-modal-title">
     <div class="modal">
         <div class="modal-header">
-            <h2>{{ t.export_title }}</h2>
+            <h2 id="export-modal-title">{{ t.export_title }}</h2>
             <button class="modal-close" onclick="closeExportModal()">&times;</button>
         </div>
         <p class="modal-hint">{{ t.export_hint }}</p>
-        <div class="export-mode-selector" style="padding:0 1.5rem;display:flex;gap:1.2rem;margin-bottom:0.5rem;">
-            <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
+        <div class="export-mode-selector">
+            <label>
                 <input type="radio" name="export-mode" value="full" checked onchange="exportForLLM()">
-                &#128202; {{ t.export_full }}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/></svg>
+                {{ t.export_full }}
             </label>
-            <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
+            <label>
                 <input type="radio" name="export-mode" value="update" onchange="exportForLLM()">
-                &#9200; {{ t.export_update }}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                {{ t.export_update }}
             </label>
         </div>
         <div class="modal-body">
@@ -2162,6 +2201,7 @@
 <script src="/static/js/chart-engine.js"></script>
 <script>
 var T = {{ t|tojson }};
+var TEMPERATURE_UNIT = {{ temperature_unit|tojson }};
 
 (function() {
     'use strict';
@@ -2217,9 +2257,11 @@ var T = {{ t|tojson }};
 
         table.querySelectorAll('th').forEach(function(h) {
             h.removeAttribute('data-sort-dir');
+            h.removeAttribute('aria-sort');
             h.classList.remove('sort-asc', 'sort-desc');
         });
         th.setAttribute('data-sort-dir', asc ? 'asc' : 'desc');
+        th.setAttribute('aria-sort', asc ? 'ascending' : 'descending');
         th.classList.add(asc ? 'sort-asc' : 'sort-desc');
 
         rows.sort(function(a, b) {
@@ -2257,6 +2299,7 @@ var T = {{ t|tojson }};
         var section = labelEl.closest('.nav-section-collapsible');
         if (section) {
             section.classList.toggle('collapsed');
+            labelEl.setAttribute('aria-expanded', labelEl.getAttribute('aria-expanded') === 'true' ? 'false' : 'true');
             if (typeof lucide !== 'undefined') lucide.createIcons();
         }
     };
@@ -2313,6 +2356,7 @@ var T = {{ t|tojson }};
         if (isMobile()) { closeSidebar(); }
         switchView(link.getAttribute('data-view'));
     });
+    /* Nav items are now <button>, so Enter/Space fires click natively */
 
     /* ── Pill tab helpers ── */
     window.selectPill = function(btn, callback) {
@@ -2339,7 +2383,6 @@ var T = {{ t|tojson }};
 
         stopAutoRefresh();
         if (typeof stopBqmLiveRefresh === 'function') stopBqmLiveRefresh();
-        if (typeof stopBqmSlideshow === 'function') stopBqmSlideshow();
 
         // View-specific init callbacks
         if (view === 'live') {
@@ -2402,7 +2445,7 @@ var T = {{ t|tojson }};
 
     /* BNetzA Breitbandmessung → integrations.js */
 
-    /* BQM Calendar, Live, Slideshow → bqm.js */
+    /* BQM Calendar, Live → bqm.js */
 
     /* ── Auto Refresh with Countdown ── */
     var refreshTimer = null;
@@ -2510,6 +2553,9 @@ var T = {{ t|tojson }};
                 // Re-init Lucide icons (lost on innerHTML replace)
                 lucide.createIcons();
 
+                // Re-init glossary keyboard a11y (lost on innerHTML replace)
+                if (typeof window.initGlossaryHints === 'function') window.initGlossaryHints();
+
                 // Refresh event badge count
                 fetch('/api/events/count')
                     .then(function(r) { return r.json(); })
@@ -2608,6 +2654,7 @@ var T = {{ t|tojson }};
 
 </script>
 <script src="/static/js/journal.js"></script>
+<script src="/modules/docsight.bqm/static/js/bqm-chart.js"></script>
 <script src="/static/js/bqm.js"></script>
 <script src="/static/js/trends.js"></script>
 <script src="/static/js/channels.js"></script>
@@ -2632,6 +2679,30 @@ var T = {{ t|tojson }};
   // Initialize Lucide icons after DOM is ready
   document.addEventListener('DOMContentLoaded', function() {
     lucide.createIcons();
+  });
+
+  // Escape key closes topmost open modal
+  document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    var closers = [
+      ['chart-zoom-overlay', closeChartZoom],
+      ['export-modal', typeof closeExportModal === 'function' ? closeExportModal : null],
+      ['report-modal', typeof closeReportModal === 'function' ? closeReportModal : null],
+      ['entry-modal', typeof closeEntryModal === 'function' ? closeEntryModal : null],
+      ['incident-container-modal', typeof closeIncidentModal === 'function' ? closeIncidentModal : null],
+      ['import-modal', typeof closeImportModal === 'function' ? closeImportModal : null],
+      ['bqm-import-modal', typeof closeBqmImportModal === 'function' ? closeBqmImportModal : null],
+      ['speedtest-setup-modal', typeof closeSpeedtestSetupModal === 'function' ? closeSpeedtestSetupModal : null],
+      ['bqm-setup-modal', typeof closeBqmSetupModal === 'function' ? closeBqmSetupModal : null],
+      ['smokeping-setup-modal', typeof closeSmokepingSetupModal === 'function' ? closeSmokepingSetupModal : null]
+    ];
+    for (var i = 0; i < closers.length; i++) {
+      var el = document.getElementById(closers[i][0]);
+      if (el && (el.classList.contains('open') || el.style.display === 'flex')) {
+        if (closers[i][1]) closers[i][1]();
+        break;
+      }
+    }
   });
 </script>
 

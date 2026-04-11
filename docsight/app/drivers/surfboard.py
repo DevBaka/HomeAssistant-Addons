@@ -20,17 +20,28 @@ Channel data arrives as pipe-delimited strings ("|+|" between channels,
 "^" between fields within a channel).
 """
 
+import base64
 import hashlib
 import hmac
 import logging
+import ssl
 import time
 from urllib.parse import urlparse, urlunparse
 
 import requests
+from requests.adapters import HTTPAdapter
 
 from .base import ModemDriver
 
 log = logging.getLogger("docsis.driver.surfboard")
+
+
+class TransientHtmlChannelPageError(RuntimeError):
+    """Raised when HTML login gets a response without channel data after retry.
+
+    Treated as a skippable transient failure by the scheduler -- no dashboard
+    error, no backoff, previous data stays.
+    """
 
 _HNAP_LOGIN_URI = '"http://purenetworks.com/HNAP1/Login"'
 _HNAP_MULTI_URI = '"http://purenetworks.com/HNAP1/GetMultipleHNAPs"'
@@ -43,6 +54,29 @@ _DS_FIELDS = 9
 # Fields per upstream channel (split by "^"):
 # num ^ lock ^ type ^ channelID ^ width ^ frequency ^ power ^
 _US_FIELDS = 7
+
+_HAS_LEGACY_TLS = hasattr(ssl, "OP_LEGACY_SERVER_CONNECT")
+
+
+class _LegacyTLSAdapter(HTTPAdapter):
+    """HTTPS adapter for SURFboard modems with old TLS stacks.
+
+    Some SB8200 firmware only supports TLS 1.0/1.1 with legacy ciphers
+    that OpenSSL 3.x rejects at default security level 2.  This adapter
+    lowers the requirements just enough to allow the handshake.
+
+    Only mounted on the driver's session after a normal TLS handshake fails.
+    """
+
+    def init_poolmanager(self, *args, **kwargs):
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        ctx.options |= ssl.OP_LEGACY_SERVER_CONNECT
+        ctx.minimum_version = ssl.TLSVersion.MINIMUM_SUPPORTED
+        ctx.set_ciphers("DEFAULT:@SECLEVEL=1")
+        kwargs["ssl_context"] = ctx
+        super().init_poolmanager(*args, **kwargs)
 
 
 class SurfboardDriver(ModemDriver):
@@ -66,6 +100,8 @@ class SurfboardDriver(ModemDriver):
         url = self._normalize_url(url)
         self._http_fallback_url = ""
         self._transport_fallback_used = False
+        self._legacy_tls_attempted = False
+        self._legacy_tls_needed = False
         if url.startswith("http://"):
             self._http_fallback_url = url
             url = "https://" + url[len("http://"):]
@@ -84,6 +120,8 @@ class SurfboardDriver(ModemDriver):
         # Action namespace: "" = unknown, "Customer" (S34) or "Moto" (SB8200).
         # Persists across session resets (firmware property, not session state).
         self._action_ns: str = ""
+        self._html_mode = False
+        self._html_status_cache: str | None = None
 
     @staticmethod
     def _normalize_url(url: str) -> str:
@@ -103,6 +141,8 @@ class SurfboardDriver(ModemDriver):
         self._session.close()
         self._session = requests.Session()
         self._session.verify = False
+        if self._legacy_tls_active():
+            self._mount_legacy_tls()
         self._private_key = ""
         self._cookie = ""
         self._logged_in = False
@@ -127,6 +167,112 @@ class SurfboardDriver(ModemDriver):
         )
         return True
 
+    def _mount_legacy_tls(self) -> None:
+        """Mount the legacy TLS adapter on the current session."""
+        self._session.mount("https://", _LegacyTLSAdapter())
+
+    def _legacy_tls_active(self) -> bool:
+        """Return True once legacy TLS has been tried or successfully used."""
+        return self._legacy_tls_attempted or self._legacy_tls_needed
+
+    def _fallback_to_legacy_tls(self) -> bool:
+        """Retry HTTPS with legacy TLS context once after a handshake failure."""
+        if self._legacy_tls_attempted or not _HAS_LEGACY_TLS:
+            return False
+        self._legacy_tls_attempted = True
+        self._mount_legacy_tls()
+        log.warning(
+            "SURFboard TLS handshake failed, retrying with legacy TLS context"
+        )
+        return True
+
+    @staticmethod
+    def _body_preview(text: str, limit: int = 200) -> str:
+        """Collapse whitespace and truncate for log output."""
+        collapsed = " ".join(text.split())
+        if len(collapsed) > limit:
+            return collapsed[:limit] + "..."
+        return collapsed
+
+    def _html_login_attempt(self) -> str:
+        """Single HTML login attempt. Returns the response body or raises."""
+        creds = base64.b64encode(
+            f"{self._user}:{self._password}".encode()
+        ).decode()
+        url = f"{self._url}/cmconnectionstatus.html?login_{creds}"
+        r = self._session.get(url, timeout=30)
+        r.raise_for_status()
+        body = r.text
+
+        # Two-step login: short response contains a session token
+        if len(body) < 500 and "downstream" not in body.lower():
+            token = body.strip()
+            if token:
+                log.info(
+                    "SURFboard HTML login returned token (%d bytes), "
+                    "fetching page with session token", len(token),
+                )
+                from urllib.parse import quote
+                prefix = "ct_" if not token.startswith("ct_") else ""
+                token_url = (
+                    f"{self._url}/cmconnectionstatus.html"
+                    f"?{prefix}{quote(token, safe='')}"
+                )
+                r2 = self._session.get(token_url, timeout=30)
+                r2.raise_for_status()
+                body = r2.text
+
+        return body
+
+    def _html_login(self) -> None:
+        """Authenticate via HTML GET endpoint (fallback for broken HNAP).
+
+        Uses the browser login path: GET /cmconnectionstatus.html?login_{base64}
+        Some SB8200 firmware versions use a two-step flow:
+          1. GET ?login_{creds} -> short response containing a session token
+          2. GET ?ct_{token}    -> full page with channel data
+
+        Validates that the final response contains channel tables.
+        On a non-channel response, resets the session and retries once.
+        """
+        try:
+            body = self._html_login_attempt()
+
+            if len(body) < 500 or "downstream" not in body.lower():
+                log.warning(
+                    "SURFboard HTML login: non-channel response (%d bytes), "
+                    "resetting session and retrying. Preview: %s",
+                    len(body), self._body_preview(body),
+                )
+                self._fresh_session()
+                body = self._html_login_attempt()
+
+            if len(body) < 500 or "downstream" not in body.lower():
+                raise TransientHtmlChannelPageError(
+                    f"SURFboard HTML login: non-channel response after retry "
+                    f"({len(body)} bytes). Preview: {self._body_preview(body)}"
+                )
+
+            self._html_status_cache = body
+            self._logged_in = True
+            log.info("SURFboard HTML login OK (%d bytes)", len(body))
+        except requests.RequestException as e:
+            raise RuntimeError(f"SURFboard HTML login failed: {e}")
+
+    def _html_get_docsis_data(self) -> dict:
+        """Retrieve DOCSIS data via HTML table scraping (fallback mode)."""
+        from .arris_html import parse_arris_channel_tables
+
+        if self._html_status_cache:
+            html = self._html_status_cache
+            self._html_status_cache = None
+        else:
+            self._html_login()
+            html = self._html_status_cache or ""
+            self._html_status_cache = None
+
+        return parse_arris_channel_tables(html)
+
     def login(self) -> None:
         """Two-phase HNAP login with HMAC.
 
@@ -139,31 +285,107 @@ class SurfboardDriver(ModemDriver):
         2. Second RELOAD: fresh session + 15s wait, retry
         3. Third RELOAD: fail
 
-        ConnectionError: fresh session + retry (transport failure).
+        TLS fallback: If the initial TLS handshake fails (old firmware),
+        retries with a legacy TLS context before falling back to HTTP.
         """
         if self._logged_in:
             return
 
+        if self._html_mode:
+            self._html_login()
+            return
+
         reload_count = 0
         conn_errors = 0
+        tls_error = ""
         while True:
             try:
                 self._do_login()
+                if self._legacy_tls_attempted:
+                    self._legacy_tls_needed = True
                 log.info("SURFboard HNAP login OK")
                 self._logged_in = True
                 return
-            except requests.ConnectionError:
+            except requests.exceptions.SSLError as e:
+                if not tls_error:
+                    tls_error = str(e)
+                if self._fallback_to_legacy_tls():
+                    time.sleep(1)
+                    continue
                 if self._fallback_to_http():
                     time.sleep(1)
                     continue
                 conn_errors += 1
                 self._fresh_session()
                 if conn_errors >= 3:
-                    raise RuntimeError(
-                        "SURFboard login failed: connection refused after retry"
+                    msg = (
+                        f"SURFboard login failed: TLS error ({tls_error}), "
+                        "connection refused on HTTP fallback"
                     )
+                    log.warning(
+                        "SURFboard HNAP login exhausted all retries, "
+                        "trying HTML fallback"
+                    )
+                    try:
+                        self._html_login()
+                        self._html_mode = True
+                        log.info(
+                            "SURFboard switched to HTML mode "
+                            "(HNAP broken on this firmware)"
+                        )
+                        return
+                    except TransientHtmlChannelPageError:
+                        raise  # let transient HTML errors propagate for skip handling
+                    except RuntimeError as html_err:
+                        raise RuntimeError(
+                            f"{msg}; HTML fallback also failed: {html_err}"
+                        )
                 log.warning(
-                    "SURFboard connection lost, retrying with fresh session"
+                    "SURFboard TLS error, retrying with fresh session"
+                )
+                time.sleep(1)
+            except requests.ConnectionError as e:
+                # If legacy TLS was in use (Phase 1 may have succeeded),
+                # preserve the adapter so _fresh_session() remounts it.
+                if self._legacy_tls_attempted:
+                    self._legacy_tls_needed = True
+                if not self._legacy_tls_needed and self._fallback_to_http():
+                    time.sleep(1)
+                    continue
+                conn_errors += 1
+                self._fresh_session()
+                if conn_errors >= 3:
+                    if self._legacy_tls_needed and self._fallback_to_http():
+                        conn_errors = 0
+                        time.sleep(1)
+                        continue
+                    msg = f"SURFboard login failed: {e}"
+                    if tls_error:
+                        msg = (
+                            f"SURFboard login failed: TLS error ({tls_error}), "
+                            f"{e}"
+                        )
+                    log.warning(
+                        "SURFboard HNAP login exhausted all retries, "
+                        "trying HTML fallback"
+                    )
+                    try:
+                        self._html_login()
+                        self._html_mode = True
+                        log.info(
+                            "SURFboard switched to HTML mode "
+                            "(HNAP broken on this firmware)"
+                        )
+                        return
+                    except TransientHtmlChannelPageError:
+                        raise  # let transient HTML errors propagate for skip handling
+                    except RuntimeError as html_err:
+                        raise RuntimeError(
+                            f"{msg}; HTML fallback also failed: {html_err}"
+                        )
+                log.warning(
+                    "SURFboard connection lost, retrying with fresh session: %s",
+                    e,
                 )
                 time.sleep(1)
             except RuntimeError as e:
@@ -243,7 +465,7 @@ class SurfboardDriver(ModemDriver):
         for algo in algos:
             algo_name = "sha256" if algo is hashlib.sha256 else "md5"
             try:
-                self._try_phase2(algo, challenge, public_key)
+                self._try_phase2(algo, challenge, public_key, cookie)
                 self._hmac_algo = algo_name
                 log.debug("SURFboard HMAC algorithm: %s", algo_name)
                 return
@@ -259,46 +481,86 @@ class SurfboardDriver(ModemDriver):
 
         raise RuntimeError(last_error or "SURFboard login failed")
 
-    def _try_phase2(self, algo, challenge: str, public_key: str) -> None:
+    def _try_phase2(self, algo, challenge: str, public_key: str,
+                    cookie: str) -> None:
         """Derive keys and send Phase 2 login using the given algorithm."""
-        self._private_key = hmac.new(
-            (public_key + self._password).encode(),
-            challenge.encode(),
-            algo,
-        ).hexdigest().upper()
+        retried = False
+        while True:
+            self._private_key = hmac.new(
+                (public_key + self._password).encode(),
+                challenge.encode(),
+                algo,
+            ).hexdigest().upper()
 
-        login_password = hmac.new(
-            self._private_key.encode(),
-            challenge.encode(),
-            algo,
-        ).hexdigest().upper()
+            login_password = hmac.new(
+                self._private_key.encode(),
+                challenge.encode(),
+                algo,
+            ).hexdigest().upper()
 
-        self._session.cookies.set("PrivateKey", self._private_key)
+            self._session.cookies.set("PrivateKey", self._private_key)
 
-        body = {
-            "Login": {
-                "Action": "login",
-                "Username": self._user,
-                "LoginPassword": login_password,
-                "Captcha": "",
-                "PrivateLogin": "LoginPassword",
+            body = {
+                "Login": {
+                    "Action": "login",
+                    "Username": self._user,
+                    "LoginPassword": login_password,
+                    "Captcha": "",
+                    "PrivateLogin": "LoginPassword",
+                }
             }
-        }
-        resp = self._hnap_post("Login", body, auth_algo=algo)
-        login_resp = resp.get("LoginResponse", {})
-        result = login_resp.get("LoginResult", "")
+            try:
+                resp = self._hnap_post("Login", body, auth_algo=algo)
+            except requests.ConnectionError as e:
+                if retried or not self._legacy_tls_active():
+                    msg = f"SURFboard phase 2 failed: {e}"
+                    if self._legacy_tls_active():
+                        msg = f"SURFboard phase 2 failed under legacy TLS: {e}"
+                    raise requests.ConnectionError(msg) from e
+                retried = True
+                log.warning(
+                    "SURFboard phase 2 connection reset under legacy TLS, "
+                    "retrying with fresh session",
+                )
+                self._fresh_session()
+                self._cookie = cookie
+                self._session.cookies.set("uid", cookie)
+                continue
 
-        if result != "OK":
-            raise RuntimeError(f"SURFboard login failed: {result}")
+            login_resp = resp.get("LoginResponse", {})
+            result = login_resp.get("LoginResult", "")
+
+            if result != "OK":
+                raise RuntimeError(f"SURFboard login failed: {result}")
+            return
 
     def get_docsis_data(self) -> dict:
         """Retrieve DOCSIS channel data via HNAP GetMultipleHNAPs.
 
         On HTTP 500: tries the other action namespace before re-authenticating.
         On other HTTP errors: re-authenticates (session expired).
+        On ConnectionError: fresh session + re-authenticate + retry once.
+            Resets speculative namespace so auto-detection restarts cleanly.
         """
+        if self._html_mode:
+            return self._html_get_docsis_data()
+        saved_ns = self._action_ns
         try:
             return self._fetch_docsis_data()
+        except requests.ConnectionError as e:
+            log.warning(
+                "DOCSIS data fetch connection error, "
+                "re-authenticating with fresh session: %s", e,
+            )
+            self._action_ns = saved_ns
+            self._fresh_session()
+            self._logged_in = False
+            self.login()
+            try:
+                return self._fetch_docsis_data()
+            except requests.ConnectionError:
+                self._action_ns = saved_ns
+                raise
         except requests.HTTPError as e:
             status = e.response.status_code if e.response is not None else 0
 
@@ -312,7 +574,7 @@ class SurfboardDriver(ModemDriver):
                 self._action_ns = other
                 try:
                     return self._fetch_docsis_data()
-                except requests.HTTPError:
+                except (requests.HTTPError, requests.ConnectionError):
                     self._action_ns = prev_ns
 
             log.warning(
@@ -383,6 +645,8 @@ class SurfboardDriver(ModemDriver):
 
     def get_device_info(self) -> dict:
         """Retrieve device model and firmware from HNAP."""
+        if self._html_mode:
+            return {"manufacturer": "Arris", "model": "SB8200", "sw_version": ""}
         try:
             model, sw = self._fetch_device_fields()
 
@@ -479,6 +743,11 @@ class SurfboardDriver(ModemDriver):
         HNAP_AUTH is sent on **every** request.  Before login the
         pre-shared key ``withoutloginkey`` is used as PrivateKey.
 
+        On transport-level failures (ConnectionError, ChunkedEncodingError)
+        retries once with a fresh HNAP_AUTH timestamp.  Some SB8200 firmware
+        resets the TCP connection after sending HTTP 200 headers but before the
+        response body is readable; a single retry often succeeds.
+
         Args:
             action: HNAP action name (e.g. "Login", "GetMultipleHNAPs")
             body: JSON body to send
@@ -500,27 +769,50 @@ class SurfboardDriver(ModemDriver):
         else:
             algo = hashlib.sha256
 
-        ts = str(int(time.time() * 1000) % 2_000_000_000_000)
-        auth_key = self._private_key or _HNAP_PRELOGIN_KEY
-        auth_payload = ts + soap_action
-        auth_hash = hmac.new(
-            auth_key.encode(),
-            auth_payload.encode(),
-            algo,
-        ).hexdigest().upper()
+        last_err: Exception | None = None
+        for attempt in range(2):
+            if attempt > 0:
+                log.warning(
+                    "HNAP %s response read failed, retrying once: %s",
+                    action, last_err,
+                )
+                time.sleep(1)
 
-        headers = {
-            "Content-Type": "application/json",
-            "SOAPACTION": soap_action,
-            "HNAP_AUTH": f"{auth_hash} {ts}",
-        }
+            ts = str(int(time.time() * 1000) % 2_000_000_000_000)
+            auth_key = self._private_key or _HNAP_PRELOGIN_KEY
+            auth_payload = ts + soap_action
+            auth_hash = hmac.new(
+                auth_key.encode(),
+                auth_payload.encode(),
+                algo,
+            ).hexdigest().upper()
 
-        r = self._session.post(url, json=body, headers=headers, timeout=30)
-        if not r.ok:
-            log.debug("HNAP %s returned HTTP %d (%d bytes): %s",
-                       action, r.status_code, len(r.content), r.text[:500])
-        r.raise_for_status()
-        return r.json()
+            headers = {
+                "Content-Type": "application/json",
+                "Connection": "close",
+                "SOAPACTION": soap_action,
+                "HNAP_AUTH": f"{auth_hash} {ts}",
+            }
+
+            try:
+                r = self._session.post(
+                    url, json=body, headers=headers, timeout=30,
+                )
+                if not r.ok:
+                    log.debug(
+                        "HNAP %s returned HTTP %d (%d bytes): %s",
+                        action, r.status_code, len(r.content), r.text[:500],
+                    )
+                r.raise_for_status()
+                return r.json()
+            except requests.exceptions.ChunkedEncodingError as e:
+                last_err = requests.ConnectionError(str(e))
+                last_err.__cause__ = e
+            except requests.ConnectionError as e:
+                last_err = e
+
+        assert last_err is not None
+        raise last_err
 
     # -- Channel parsers --
 

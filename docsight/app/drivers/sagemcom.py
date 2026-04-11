@@ -23,6 +23,10 @@ from .base import ModemDriver
 
 log = logging.getLogger("docsis.driver.sagemcom")
 
+
+class XMOSessionError(RuntimeError):
+    """Raised when the modem returns a session-related XMO error."""
+
 _API_PATH = "/cgi/json-req"
 _NSS = [{"name": "gtw", "uri": "http://sagemcom.com/gateway-data"}]
 
@@ -77,6 +81,13 @@ class SagemcomDriver(ModemDriver):
                     time.sleep(1)
                     continue
                 raise RuntimeError("Sagemcom login failed: connection refused after retry")
+            except XMOSessionError:
+                if attempt == 0:
+                    log.warning("Sagemcom session error during login, resetting")
+                    self._reset_session()
+                    time.sleep(1)
+                    continue
+                raise RuntimeError("Sagemcom login failed: session error after retry")
             except requests.RequestException as e:
                 raise RuntimeError(f"Sagemcom login failed: {e}")
 
@@ -254,13 +265,16 @@ class SagemcomDriver(ModemDriver):
         resp = r.json()
         error = resp.get("reply", {}).get("error", {})
         if error.get("description") not in ("XMO_REQUEST_NO_ERR", None):
-            # Log action-level errors for debugging
             for action in resp.get("reply", {}).get("actions", []):
                 act_err = action.get("error", {})
                 if act_err.get("description") != "XMO_NO_ERR":
                     log.debug("Sagemcom action error: %s", act_err)
-            if error.get("code") == 16777236:
-                raise RuntimeError(f"Sagemcom action error: {error.get('description')}")
+            desc = error.get("description", "")
+            code = error.get("code")
+            msg = f"Sagemcom XMO error: {desc} (code={code})"
+            if code == 16777219 or "SESSION" in desc:  # XMO_INVALID_SESSION_ERR
+                raise XMOSessionError(msg)
+            raise RuntimeError(msg)
         return resp
 
     @staticmethod

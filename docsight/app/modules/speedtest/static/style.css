@@ -34,6 +34,27 @@
 .st-signal-detail .st-us-mods { grid-column: 1 / -1; }
 .st-signal-detail .st-us-mods span { margin-right: 10px; }
 
+/* Enriched detail section */
+.st-enriched-wrap { margin-top: 12px; }
+.st-enriched-group { margin-bottom: 10px; }
+.st-enriched-heading {
+    font-size: 0.75em; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.04em; color: var(--muted);
+    margin-bottom: 6px; padding-bottom: 4px;
+    border-bottom: 1px solid var(--input-border);
+}
+.st-enriched-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 6px 16px;
+}
+.st-ookla-link {
+    color: var(--accent) !important;
+    text-decoration: none; opacity: 0.8;
+    transition: opacity 0.15s;
+}
+.st-ookla-link:hover { opacity: 1; text-decoration: underline; }
+
 /* Modern Card Design */
 .speedtest-chart-card {
     background: var(--card-bg, var(--card));
@@ -42,11 +63,6 @@
     padding: var(--space-lg, 20px);
     margin-bottom: var(--space-xl, 24px);
     transition: all 0.2s ease;
-}
-.speedtest-chart-card:hover {
-    border-color: var(--accent-purple, #a855f7);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(168,85,247,0.15);
 }
 .speedtest-chart-wrap {
     position: relative;
@@ -126,7 +142,45 @@
     background: rgba(168,85,247,0.08);
 }
 
-/* Responsive table card */
+/* Speedtest controls bar */
+.speedtest-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* Empty state */
+.speedtest-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 48px 24px;
+}
+.speedtest-empty-title {
+    font-size: 1.1em;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+}
+.speedtest-empty-desc {
+    font-size: 0.85em;
+    color: var(--text-secondary);
+    max-width: 360px;
+    line-height: 1.5;
+}
+.speedtest-empty-state.speedtest-empty-error .speedtest-empty-title,
+.speedtest-empty-state.speedtest-empty-error .speedtest-empty-desc,
+.speedtest-empty-state.speedtest-empty-error .btn,
+.speedtest-empty-state.speedtest-empty-error [data-lucide] {
+    display: none;
+}
+.speedtest-empty-state.speedtest-empty-error::after {
+    content: attr(data-error);
+    color: var(--text-muted);
+}
+
+/* Responsive */
 @media (max-width: 768px) {
     .speedtest-chart-card {
         padding: var(--space-md, 16px);
@@ -135,5 +189,57 @@
     #speedtest-table tbody td {
         padding: 8px 12px;
         font-size: 0.8em;
+    }
+}
+
+@media (max-width: 640px) {
+    .speedtest-controls {
+        flex-wrap: wrap;
+        justify-content: center;
+        width: 100%;
+    }
+    .speedtest-controls .trend-tabs {
+        order: 1;
+        width: 100%;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    .speedtest-controls .trend-tabs .trend-tab {
+        padding: 6px 14px;
+        font-size: 0.82em;
+    }
+    .speedtest-controls #speedtest-run-btn {
+        order: 2;
+    }
+    .speedtest-controls #speedtest-refresh-btn {
+        order: 3;
+    }
+    .speedtest-chart-card {
+        padding: var(--space-sm, 12px);
+    }
+    .speedtest-chart-wrap canvas {
+        height: 180px;
+    }
+    .speedtest-chart-legend {
+        flex-wrap: wrap;
+        gap: 8px 14px;
+    }
+    #speedtest-table thead th,
+    #speedtest-table tbody td {
+        padding: 6px 8px;
+        font-size: 0.78em;
+    }
+    .st-signal-detail {
+        grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+        gap: 6px 10px;
+        padding: 8px 10px;
+    }
+    .st-signal-detail .st-us-mods span {
+        word-break: break-word;
+    }
+    .trend-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
     }
 }

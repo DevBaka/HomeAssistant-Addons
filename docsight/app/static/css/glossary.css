@@ -6,24 +6,33 @@
   cursor: pointer;
   margin-left: 4px;
   vertical-align: middle;
+  /* Keyboard focusable via JS tabindex */
+}
+.glossary-hint:focus-visible {
+  outline: 2px solid var(--amethyst);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
-/* Inside metric cards: position in top-left corner */
+/* Inside metric cards: position in top-left corner, reveal on hover */
 .metric-card .glossary-hint {
   position: absolute;
   top: 10px;
   left: 10px;
   margin: 0;
   z-index: 2;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.metric-card:hover .glossary-hint,
+.metric-card .glossary-hint:focus-visible {
+  opacity: 1;
 }
 
-/* Inside modulation KPI cards: top-left corner */
-.modulation-kpi-card .glossary-hint {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  margin: 0;
-  z-index: 2;
+/* Inside modulation KPI strip: inline, no absolute positioning */
+.mod-kpi-item .glossary-hint {
+  margin-left: 0;
+  order: -1;
 }
 
 .glossary-hint > i,

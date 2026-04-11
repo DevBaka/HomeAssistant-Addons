@@ -42,6 +42,8 @@ function switchSection(id) {
     if (id === 'security') loadApiTokens();
     if (target && target.querySelector('#backup-list')) loadBackupList();
     if (id === 'themes') refreshRegistry();
+    if (id === 'smart_capture') loadSmartCaptureHistory();
+    if (id === 'extensions') refreshModuleRegistry();
 
     /* URL hash */
     history.replaceState(null, '', '#' + id);
@@ -200,6 +202,22 @@ function toggleThemeFromAppearance(checked) {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('docsis-theme', theme);
     updatePaletteDots(theme);
+}
+
+function applyFontToggle(useSystem) {
+    var el = document.getElementById('font-override');
+    var hidden = document.getElementById('font_family');
+    if (hidden) hidden.value = useSystem ? 'system' : 'outfit';
+    if (useSystem) {
+        if (!el) {
+            el = document.createElement('style');
+            el.id = 'font-override';
+            el.textContent = ':root { --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }';
+            document.head.appendChild(el);
+        }
+    } else if (el) {
+        el.remove();
+    }
 }
 
 function updatePaletteDots(mode) {
@@ -426,6 +444,30 @@ function testSpeedtest() {
         el.appendChild(x);
         el.appendChild(document.createTextNode(' ' + T.network_error));
     });
+}
+
+/* ── Speedtest Cache Clear ── */
+function clearSpeedtestCache(btn) {
+    if (!confirm(T.clear_cache_confirm || 'Clear all cached speedtest results? They will be re-synced on the next poll cycle.')) return;
+    btn.disabled = true;
+    fetch('/api/speedtest/cache', { method: 'DELETE' })
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            btn.disabled = false;
+            if (res.success) {
+                var count = res.cleared || 0;
+                btn.textContent = '\u2713 ' + count + ' ' + (T.cleared || 'cleared');
+                setTimeout(function() {
+                    btn.textContent = '';
+                    var icon = document.createElement('i');
+                    icon.setAttribute('data-lucide', 'trash-2');
+                    btn.appendChild(icon);
+                    btn.appendChild(document.createTextNode(' ' + (T['docsight.speedtest.clear_cache'] || 'Clear Cache')));
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
+                }, 2000);
+            }
+        })
+        .catch(function() { btn.disabled = false; });
 }
 
 /* ── Notification Test ── */
@@ -928,15 +970,7 @@ function _createBrowseItem(label, targetPath, iconName, isMuted) {
 }
 
 /* ── Username Field Toggle + Modem Defaults (data-driven) ── */
-var KNOWN_DEFAULT_URLS = (function() {
-    var urls = {};
-    if (typeof DRIVER_HINTS !== 'undefined') {
-        for (var k in DRIVER_HINTS) {
-            if (DRIVER_HINTS[k].default_url) urls[DRIVER_HINTS[k].default_url] = true;
-        }
-    }
-    return urls;
-})();
+var _previousDriverDefault = '';
 
 function toggleUsernameField() {
     var modemType = document.getElementById('modem_type');
@@ -955,10 +989,11 @@ function toggleUsernameField() {
     var testBtnParent = testBtn ? testBtn.parentElement : null;
     var testResult = document.getElementById('modem-test');
 
-    // URL default: apply if field is empty or still shows any known modem default
-    if (hints.default_url && urlField && (!urlField.value || KNOWN_DEFAULT_URLS[urlField.value])) {
+    // URL default: apply only if field is empty or shows the previous driver's default
+    if (hints.default_url && urlField && (!urlField.value || urlField.value === _previousDriverDefault)) {
         urlField.value = hints.default_url;
     }
+    _previousDriverDefault = hints.default_url || '';
 
     if (hints.credentials_required === false) {
         credFields.forEach(function(el) { if (el) el.style.display = 'none'; });
@@ -1257,4 +1292,299 @@ function installTheme(themeId, downloadUrl) {
         .catch(function(err) {
             showToast((T.error_prefix || 'Error') + ': ' + err.message, true);
         });
+}
+
+function validateBqmMonitor() {
+    // Legacy function name kept for backwards compatibility
+    // No longer used — validation removed from settings UI
+}
+
+/* ── Smart Capture History ── */
+// Note: uses innerHTML with escapeHtml() for all dynamic content, consistent with
+// the existing pattern used throughout events.js, speedtest.js, and correlation.js.
+function loadSmartCaptureHistory() {
+    var loading = document.getElementById('sc-history-loading');
+    var empty = document.getElementById('sc-history-empty');
+    var tableWrap = document.getElementById('sc-history-table-wrap');
+    var tbody = document.getElementById('sc-history-tbody');
+    if (!tbody) return;
+
+    if (loading) loading.style.display = '';
+    if (empty) empty.style.display = 'none';
+    if (tableWrap) tableWrap.style.display = 'none';
+
+    fetch('/api/smart-capture/executions?limit=50')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (loading) loading.style.display = 'none';
+            var execs = data.executions || [];
+            while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+            if (execs.length === 0) {
+                if (empty) empty.style.display = '';
+                return;
+            }
+            if (tableWrap) tableWrap.style.display = '';
+            var statusLabels = {
+                completed: T.sc_status_completed || 'Completed',
+                fired: T.sc_status_fired || 'Fired',
+                pending: T.sc_status_pending || 'Pending',
+                suppressed: T.sc_status_suppressed || 'Suppressed',
+                expired: T.sc_status_expired || 'Expired'
+            };
+            execs.forEach(function(ex) {
+                var tr = document.createElement('tr');
+                var ts = ex.created_at ? ex.created_at.replace('T', ' ').replace('Z', '') : '';
+                var trigger = escapeHtml(ex.trigger_type || '');
+                var label = statusLabels[ex.status] || ex.status;
+                var detail = '';
+                if (ex.suppression_reason) {
+                    detail = escapeHtml(ex.suppression_reason);
+                } else if (ex.linked_result_id) {
+                    detail = 'Result #' + ex.linked_result_id;
+                } else if (ex.last_error) {
+                    detail = escapeHtml(ex.last_error);
+                }
+                // Dynamic content sanitized via escapeHtml before insertion
+                tr.innerHTML = '<td style="white-space:nowrap;font-size:0.85em;">' + escapeHtml(ts) + '</td>'
+                    + '<td>' + trigger + '</td>'
+                    + '<td><span class="sc-status-' + escapeHtml(ex.status) + '">' + escapeHtml(label) + '</span></td>'
+                    + '<td style="font-size:0.85em;color:var(--muted);">' + detail + '</td>';
+                tbody.appendChild(tr);
+            });
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        })
+        .catch(function() {
+            if (loading) loading.style.display = 'none';
+            if (empty) empty.style.display = '';
+            showToast(T.sc_history_error || 'Failed to load execution history', false);
+        });
+}
+
+/* ── Smart Capture Guardrails Summary ── */
+function updateGuardrailsSummary() {
+    var el = document.getElementById('sc-guardrails-summary');
+    var cooldownEl = document.getElementById('sc_global_cooldown');
+    var maxEl = document.getElementById('sc_max_actions_per_hour');
+    if (!el || !cooldownEl || !maxEl) return;
+    var cooldown = parseInt(cooldownEl.value) || 0;
+    var maxPerHour = parseInt(maxEl.value) || 1;
+    var cooldownStr;
+    if (cooldown >= 3600) cooldownStr = Math.round(cooldown / 3600) + 'h';
+    else if (cooldown >= 60) cooldownStr = Math.round(cooldown / 60) + ' min';
+    else cooldownStr = cooldown + 's';
+    var tpl = T.sc_guardrails_summary || 'At most %max%/hour, minimum %cooldown% apart';
+    el.textContent = tpl.replace('%max%', maxPerHour).replace('%cooldown%', cooldownStr);
+}
+
+// Initialize guardrails summary on load and input
+(function() {
+    function init() {
+        updateGuardrailsSummary();
+        ['sc_global_cooldown', 'sc_max_actions_per_hour'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.addEventListener('input', updateGuardrailsSummary);
+        });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
+
+/* ── Community Module Registry ── */
+var _registryFetching = false;
+
+function refreshModuleRegistry() {
+    var gallery = document.getElementById('module-registry-gallery');
+    var empty = document.getElementById('module-registry-empty');
+    var loading = document.getElementById('module-registry-loading');
+    if (!gallery || _registryFetching) return;
+    _registryFetching = true;
+
+    if (loading) loading.style.display = '';
+    if (empty) empty.style.display = 'none';
+    gallery.style.display = 'none';
+
+    fetch('/api/modules/registry')
+        .then(function(r) { return r.json(); })
+        .then(function(modules) {
+            if (loading) loading.style.display = 'none';
+            if (!modules || modules.length === 0) {
+                gallery.style.display = 'none';
+                if (empty) empty.style.display = '';
+                return;
+            }
+            gallery.style.display = '';
+            if (empty) empty.style.display = 'none';
+
+            // Build cards — dynamic content assigned via textContent (inherently safe)
+            _renderRegistryCards(gallery, modules);
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        })
+        .catch(function() {
+            if (loading) loading.style.display = 'none';
+            gallery.style.display = 'none';
+            if (empty) empty.style.display = '';
+            showToast(T.extensions_fetch_failed || 'Failed to load registry.', true);
+        })
+        .finally(function() { _registryFetching = false; });
+}
+
+function _renderRegistryCards(gallery, modules) {
+    while (gallery.firstChild) gallery.removeChild(gallery.firstChild);
+
+    modules.forEach(function(mod) {
+        var status = mod.status || 'not_installed';
+
+        var card = document.createElement('div');
+        card.className = 'module-registry-card';
+
+        var info = document.createElement('div');
+        info.className = 'registry-card-info';
+
+        var nameRow = document.createElement('div');
+        nameRow.className = 'registry-card-name';
+        nameRow.textContent = mod.name || mod.id;
+        if (mod.verified) {
+            var vBadge = document.createElement('span');
+            vBadge.className = 'module-badge badge-verified';
+            vBadge.textContent = T.extensions_verified || 'Verified';
+            nameRow.appendChild(vBadge);
+        }
+
+        var desc = document.createElement('div');
+        desc.className = 'registry-card-desc';
+        desc.textContent = mod.description || '';
+
+        var meta = document.createElement('div');
+        meta.className = 'registry-card-meta';
+        meta.textContent = (mod.author || '') + ' \u00B7 v' + (mod.version || '') + ' \u00B7 ';
+        var statusSpan = document.createElement('span');
+        if (status === 'not_installed') {
+            statusSpan.textContent = T.extensions_not_installed || 'Not installed';
+        } else if (status === 'installed_disabled') {
+            statusSpan.textContent = T.extensions_installed || 'Installed';
+            statusSpan.className = 'registry-status-warn';
+        } else {
+            statusSpan.textContent = T.extensions_installed || 'Installed';
+            statusSpan.className = 'registry-status-good';
+        }
+        meta.appendChild(statusSpan);
+
+        info.appendChild(nameRow);
+        info.appendChild(desc);
+        info.appendChild(meta);
+
+        var action = document.createElement('div');
+        action.className = 'registry-card-action';
+
+        var btn = document.createElement('button');
+        if (status === 'not_installed') {
+            btn.className = 'btn btn-sm btn-install';
+            btn.textContent = T.extensions_install || 'Install';
+            btn.addEventListener('click', function(e) { installModule(e, mod.id, mod.download_url); });
+        } else {
+            btn.className = 'btn btn-sm btn-uninstall';
+            btn.textContent = T.extensions_uninstall || 'Uninstall';
+            btn.addEventListener('click', function(e) { uninstallModule(e, mod.id); });
+        }
+        action.appendChild(btn);
+
+        card.appendChild(info);
+        card.appendChild(action);
+        gallery.appendChild(card);
+    });
+}
+
+/* Two-step install: first click shows "Confirm?", second click installs */
+function installModule(e, id, downloadUrl) {
+    var btn = e.currentTarget;
+    if (btn.dataset.confirmPending !== 'true') {
+        btn.dataset.confirmPending = 'true';
+        btn.className = 'btn btn-sm btn-confirm';
+        btn.textContent = T.extensions_confirm || 'Confirm?';
+        btn._resetTimer = setTimeout(function() {
+            btn.dataset.confirmPending = 'false';
+            btn.className = 'btn btn-sm btn-install';
+            btn.textContent = T.extensions_install || 'Install';
+        }, 3000);
+        return;
+    }
+    clearTimeout(btn._resetTimer);
+    btn.dataset.confirmPending = 'false';
+    btn.disabled = true;
+    btn.textContent = '...';
+
+    fetch('/api/modules/install', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({id: id, download_url: downloadUrl}),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            showToast(T.extensions_install_success || 'Module installed successfully');
+            var banner = document.getElementById('module-restart-banner');
+            if (banner) { banner.style.display = ''; if (typeof lucide !== 'undefined') lucide.createIcons({nodes: [banner]}); }
+            refreshModuleRegistry();
+        } else {
+            showToast(data.error || (T.extensions_install_failed || 'Installation failed'), true);
+            btn.disabled = false;
+            btn.className = 'btn btn-sm btn-install';
+            btn.textContent = T.extensions_install || 'Install';
+        }
+    })
+    .catch(function(err) {
+        showToast((T.extensions_install_failed || 'Installation failed') + ': ' + err.message, true);
+        btn.disabled = false;
+        btn.className = 'btn btn-sm btn-install';
+        btn.textContent = T.extensions_install || 'Install';
+    });
+}
+
+/* Two-step uninstall */
+function uninstallModule(e, id) {
+    var btn = e.currentTarget;
+    if (btn.dataset.confirmPending !== 'true') {
+        btn.dataset.confirmPending = 'true';
+        btn.className = 'btn btn-sm btn-confirm';
+        btn.textContent = T.extensions_confirm || 'Confirm?';
+        btn._resetTimer = setTimeout(function() {
+            btn.dataset.confirmPending = 'false';
+            btn.className = 'btn btn-sm btn-uninstall';
+            btn.textContent = T.extensions_uninstall || 'Uninstall';
+        }, 3000);
+        return;
+    }
+    clearTimeout(btn._resetTimer);
+    btn.dataset.confirmPending = 'false';
+    btn.disabled = true;
+    btn.textContent = '...';
+
+    fetch('/api/modules/uninstall', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({id: id}),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            showToast(T.extensions_uninstall_success || 'Module uninstalled');
+            var banner = document.getElementById('module-restart-banner');
+            if (banner) { banner.style.display = ''; if (typeof lucide !== 'undefined') lucide.createIcons({nodes: [banner]}); }
+            refreshModuleRegistry();
+        } else {
+            showToast(data.error || (T.extensions_uninstall_failed || 'Uninstall failed'), true);
+            btn.disabled = false;
+            btn.className = 'btn btn-sm btn-uninstall';
+            btn.textContent = T.extensions_uninstall || 'Uninstall';
+        }
+    })
+    .catch(function(err) {
+        showToast((T.extensions_uninstall_failed || 'Uninstall failed') + ': ' + err.message, true);
+        btn.disabled = false;
+        btn.className = 'btn btn-sm btn-uninstall';
+        btn.textContent = T.extensions_uninstall || 'Uninstall';
+    });
 }
