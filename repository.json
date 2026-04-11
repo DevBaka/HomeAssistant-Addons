@@ -2,75 +2,21 @@
   "name": "DevBaka Addons",
   "url": "https://github.com/DevBaka/HomeAssistant-Addons",
   "maintainer": "DevBaka",
-  "version": "2024-04-11-02-40",
+  "version": "2024-04-11-02-45",
   "addons": [
     {
       "name": "DOCSight",
       "slug": "docsight",
       "description": "Monitor your cable internet connection 24/7 and collect evidence for ISP complaints",
       "version": "1.0.0",
-      "arch": ["aarch64", "armv7", "amd64"],
-      "startup": "services",
-      "boot": "auto",
-      "map": ["config:rw"],
-      "host_network": true,
+      "arch": ["amd64"],
+      "startup": "application",
+      "boot": "manual",
       "ports": {
         "8765/tcp": 8765
       },
-      "ports_description": {
-        "8765/tcp": "DOCSight web interface"
-      },
-      "options": {
-        "log_level": "info"
-      },
-      "schema": {
-        "log_level": "list(debug|info|warning|error)"
-      }
-    },
-    {
-      "name": "Icecast Server",
-      "slug": "icecast",
-      "description": "Icecast2 streaming server for Home Assistant",
-      "version": "1.0.0",
-      "arch": ["aarch64", "armv7", "amd64"],
-      "startup": "services",
-      "boot": "auto",
-      "map": ["config:rw"],
-      "host_network": true,
       "options": {},
       "schema": {}
-    },
-    {
-      "name": "Spotify Connect",
-      "slug": "spotify-connect",
-      "description": "Play Spotify music on your Home Assistant device",
-      "version": "1.0.0",
-      "arch": ["aarch64", "amd64"],
-      "startup": "application",
-      "boot": "manual",
-      "host_network": true,
-      "audio": true,
-      "ports": {
-        "4070/tcp": 4070
-      },
-      "ports_description": {
-        "4070/tcp": "Spotify Connect port"
-      },
-      "options": {
-        "name": "Home Assistant",
-        "bitrate": 160,
-        "initial_volume": 50,
-        "autoplay": true
-      },
-      "schema": {
-        "log_level": "list(trace|debug|info|notice|warning|error|fatal)?",
-        "name": "str",
-        "bitrate": "list(96|160|320)",
-        "username": "str?",
-        "password": "password?",
-        "autoplay": "bool",
-        "initial_volume": "match(^([0-9]|[1-9][0-9]|100)$)?"
-      }
     },
     {
       "name": "Speedtest Tracker",
@@ -83,12 +29,8 @@
       "ports": {
         "8080/tcp": 8080
       },
-      "options": {
-        "log_level": "info"
-      },
-      "schema": {
-        "log_level": "list(debug|info|warning|error)"
-      }
+      "options": {},
+      "schema": {}
     }
   ]
 }
